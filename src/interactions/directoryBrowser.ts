@@ -391,7 +391,7 @@ export async function handleSessionStart(interaction: ButtonInteraction): Promis
     .setCustomId('a4d:model:select')
     .setPlaceholder('Select a model...')
     .addOptions(
-      { label: 'Opus 4.6 (most capable)', value: 'opus', default: true },
+      { label: 'Opus 4.7 (most capable)', value: 'opus', default: true },
       { label: 'Sonnet 4.6 (fast)', value: 'sonnet' },
       { label: 'Haiku 4.5 (fastest)', value: 'haiku' },
     );
@@ -463,7 +463,7 @@ export async function handleModelSelect(interaction: StringSelectMenuInteraction
   const { path: cwdPath, perm } = parseModelFooter(interaction);
 
   const modelLabels: Record<string, string> = {
-    opus: 'Opus 4.6 (most capable)',
+    opus: 'Opus 4.7 (most capable)',
     sonnet: 'Sonnet 4.6 (fast)',
     haiku: 'Haiku 4.5 (fastest)',
   };
@@ -472,7 +472,7 @@ export async function handleModelSelect(interaction: StringSelectMenuInteraction
     .setCustomId('a4d:model:select')
     .setPlaceholder('Select a model...')
     .addOptions(
-      { label: 'Opus 4.6 (most capable)', value: 'opus', default: selected === 'opus' },
+      { label: 'Opus 4.7 (most capable)', value: 'opus', default: selected === 'opus' },
       { label: 'Sonnet 4.6 (fast)', value: 'sonnet', default: selected === 'sonnet' },
       { label: 'Haiku 4.5 (fastest)', value: 'haiku', default: selected === 'haiku' },
     );
@@ -532,7 +532,7 @@ export async function handlePermModeSelect(interaction: StringSelectMenuInteract
   const { path: cwdPath, model } = parseModelFooter(interaction);
 
   const modelLabels: Record<string, string> = {
-    opus: 'Opus 4.6 (most capable)',
+    opus: 'Opus 4.7 (most capable)',
     sonnet: 'Sonnet 4.6 (fast)',
     haiku: 'Haiku 4.5 (fastest)',
   };
@@ -548,7 +548,7 @@ export async function handlePermModeSelect(interaction: StringSelectMenuInteract
     .setCustomId('a4d:model:select')
     .setPlaceholder('Select a model...')
     .addOptions(
-      { label: 'Opus 4.6 (most capable)', value: 'opus', default: model === 'opus' },
+      { label: 'Opus 4.7 (most capable)', value: 'opus', default: model === 'opus' },
       { label: 'Sonnet 4.6 (fast)', value: 'sonnet', default: model === 'sonnet' },
       { label: 'Haiku 4.5 (fastest)', value: 'haiku', default: model === 'haiku' },
     );
