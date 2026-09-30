@@ -55,6 +55,14 @@ export async function startBot(): Promise<void> {
 
   // --- Interaction handling ---
   client.on(Events.InteractionCreate, async (interaction) => {
+    // PATCH: only configured owners may use any command, button or menu
+    if (!config.ownerIds.includes(interaction.user.id)) {
+      if (interaction.isRepliable()) {
+        await interaction.reply({ content: 'Not authorized.', ephemeral: true }).catch(() => {});
+      }
+      return;
+    }
+
     // Slash commands
     if (interaction.isChatInputCommand()) {
       const handler = commands.get(interaction.commandName);
@@ -98,9 +106,13 @@ export async function startBot(): Promise<void> {
   // --- Message handling ---
   client.on(Events.MessageCreate, async (message) => {
     if (message.author.bot) return;
+    if (!config.ownerIds.includes(message.author.id)) return; // PATCH: owners only
 
     const session = sessionManager.getSession(message.channelId);
     if (!session) return;
+
+    // PATCH: only the session owner can talk to Claude
+    if (message.author.id !== session.userId) return;
 
     // Archive previous turn's tool threads
     const prevThreadIds = getAndClearTurnThreads(message.channelId);

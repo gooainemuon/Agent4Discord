@@ -124,8 +124,15 @@ export async function runSetup(): Promise<void> {
     console.log('  Could not open browser. Please visit the URL above manually.');
   }
 
+  // PATCH: ask for the owner's Discord user ID
+  const ownerId = await input({
+    message: 'Your Discord user ID (Developer Mode → right-click your name → Copy User ID):',
+    validate: (v) => /^\d{15,21}$/.test(v.trim()) || 'Enter a numeric Discord user ID',
+  });
+
   // Save config
   const config: AppConfig = {
+    ownerIds: [ownerId.trim()],
     discordToken: discordToken.trim(),
     discordClientId: discordClientId.trim(),
     claudeModel: 'opus',

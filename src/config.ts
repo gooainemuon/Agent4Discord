@@ -8,6 +8,8 @@ export interface AppConfig {
   claudeModel: string;
   permissionMode: string;
   logLevel: string;
+  /** PATCH: Discord user IDs allowed to use the bot. Empty = nobody. */
+  ownerIds: string[];
 }
 
 export const CONFIG_DIR: string = path.join(os.homedir(), '.agent4discord');
@@ -49,6 +51,7 @@ export function loadConfig(): AppConfig {
     claudeModel: (typeof obj['claudeModel'] === 'string' ? obj['claudeModel'] : DEFAULTS.claudeModel) as string,
     permissionMode: (typeof obj['permissionMode'] === 'string' ? obj['permissionMode'] : DEFAULTS.permissionMode) as string,
     logLevel: (typeof obj['logLevel'] === 'string' ? obj['logLevel'] : DEFAULTS.logLevel) as string,
+    ownerIds: Array.isArray(obj['ownerIds']) ? (obj['ownerIds'] as unknown[]).filter((x): x is string => typeof x === 'string') : [],
   };
 }
 
@@ -58,7 +61,8 @@ export function saveConfig(config: AppConfig): void {
   }
 
   const data = JSON.stringify(config, null, 2) + '\n';
-  fs.writeFileSync(CONFIG_PATH, data, { encoding: 'utf-8' });
+  fs.writeFileSync(CONFIG_PATH, data, { encoding: 'utf-8', mode: 0o600 });
+  fs.chmodSync(CONFIG_PATH, 0o600); // PATCH: bot token must not be world-readable
 
   // Set restrictive permissions on non-Windows platforms
   if (process.platform !== 'win32') {

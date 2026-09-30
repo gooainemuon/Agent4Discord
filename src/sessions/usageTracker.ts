@@ -73,6 +73,9 @@ let isOAuthAvailable = true;
 // ---------------------------------------------------------------------------
 
 function readCredentials(): OAuthCredentials | null {
+  // PATCH: never read/refresh the Claude Code OAuth credentials.
+  // Avoids refresh-token races with the CLI and undocumented endpoint use.
+  return null;
   try {
     const raw = fs.readFileSync(CREDENTIALS_PATH, 'utf-8');
     const data = JSON.parse(raw);
@@ -89,6 +92,7 @@ function readCredentials(): OAuthCredentials | null {
 }
 
 function writeCredentials(creds: OAuthCredentials): void {
+  return; // PATCH: never write credentials
   try {
     let data: any = {};
     try {
