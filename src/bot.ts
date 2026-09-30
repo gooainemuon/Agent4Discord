@@ -16,6 +16,7 @@ import { processAttachments } from './utils/attachments.js';
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { checkForUpdates } from './utils/updateCheck.js';
 import { setupAutoArchive } from './sessions/autoArchive.js';
+import { setupLifecycle } from './sessions/lifecycle.js';
 
 export async function startBot(): Promise<void> {
   void checkForUpdates();
@@ -184,6 +185,9 @@ export async function startBot(): Promise<void> {
     setupUsageTracker(client);
     setupAutoArchive(client);
   });
+
+  // Graceful and scheduled shutdown (signals from a4d-ctl)
+  setupLifecycle(client);
 
   // Start
   await client.login(config.discordToken);

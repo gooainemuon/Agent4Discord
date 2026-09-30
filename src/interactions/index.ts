@@ -37,6 +37,7 @@ import {
 } from './diffViewer.js';
 import { handlePermissionModeChange } from '../commands/permission.js';
 import { handleUsageRefresh } from '../sessions/usageTracker.js';
+import { handleShutdownButton } from '../sessions/lifecycle.js';
 
 /**
  * Route component interactions (buttons, select menus) based on customId prefix.
@@ -195,6 +196,11 @@ export async function routeInteraction(
         await interaction.reply({ content: 'Unknown resume action.', ephemeral: true });
         return;
     }
+  }
+
+  if (customId.startsWith('a4d:shutdown:')) {
+    await handleShutdownButton(interaction as ButtonInteraction);
+    return;
   }
 
   console.warn(`[interactions] Unknown customId: ${customId}`);
