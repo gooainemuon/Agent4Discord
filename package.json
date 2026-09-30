@@ -17,7 +17,8 @@
     "start": "node dist/cli.js",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "eslint src/"
+    "lint": "eslint src/",
+    "ctl": "node tools/a4d-ctl/a4d-ctl.mjs"
   },
   "keywords": [
     "discord",
