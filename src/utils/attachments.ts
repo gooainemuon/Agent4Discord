@@ -3,7 +3,8 @@ import path from 'node:path';
 import type { Attachment, Collection, Snowflake } from 'discord.js';
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 
-const IMAGE_TYPES = new Set(['image/jpeg', 'image/png', 'image/gif', 'image/webp']);
+type ImageMediaType = 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp';
+
 const PDF_TYPE = 'application/pdf';
 
 // Extensions treated as text even if contentType is missing or generic
@@ -17,11 +18,25 @@ const TEXT_EXTENSIONS = new Set([
   '.patch', '.svelte', '.vue',
 ]);
 
-const MAX_IMAGE_BASE64_SIZE = 20 * 1024 * 1024; // 20 MB — API limit for inline images
+const MAX_IMAGE_BASE64_SIZE = 10 * 1000 * 1000; // 10 MB (base64-encoded) — API limit for inline images
 
 export interface ProcessedAttachment {
   savedPath: string;
   contentBlocks: ContentBlockParam[];
+}
+
+// Detect the real image format from magic bytes. Discord's reported contentType can
+// disagree with the actual bytes (e.g. clipboard pastes), and a mismatched media_type
+// is rejected by the API — permanently breaking the session since history is replayed.
+export function sniffImageMediaType(buf: Buffer): ImageMediaType | null {
+  if (buf.length >= 8 && buf.subarray(0, 8).equals(
+    Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'image/png';
+  if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'image/jpeg';
+  const head = buf.subarray(0, 6).toString('latin1');
+  if (head === 'GIF87a' || head === 'GIF89a') return 'image/gif';
+  if (buf.length >= 12 && buf.subarray(0, 4).toString('latin1') === 'RIFF' &&
+    buf.subarray(8, 12).toString('latin1') === 'WEBP') return 'image/webp';
+  return null;
 }
 
 function isTextFile(contentType: string | null, filename: string): boolean {
@@ -71,15 +86,17 @@ export async function processAttachments(
 
       const contentType = attachment.contentType;
       const blocks: ContentBlockParam[] = [];
+      const imageType = sniffImageMediaType(buffer);
 
-      if (contentType && IMAGE_TYPES.has(contentType)) {
-        if (buffer.length <= MAX_IMAGE_BASE64_SIZE) {
+      if (imageType) {
+        const data = buffer.toString('base64');
+        if (data.length <= MAX_IMAGE_BASE64_SIZE) {
           blocks.push({
             type: 'image',
             source: {
               type: 'base64',
-              media_type: contentType as 'image/jpeg' | 'image/png' | 'image/gif' | 'image/webp',
-              data: buffer.toString('base64'),
+              media_type: imageType,
+              data,
             },
           });
         } else {
