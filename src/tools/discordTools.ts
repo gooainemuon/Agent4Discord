@@ -16,7 +16,7 @@ export function getUploadLimit(premiumTier: GuildPremiumTier): number {
 export function createDiscordToolServer(sendFile: SendFileCallback) {
   const attachFile = tool(
     'attach_file',
-    'Send a file to the current Discord channel where this session is running. Use this tool whenever the user asks you to attach, send, share, or upload a file or image to Discord. The file must exist on the local filesystem — create it first with Write or Bash if needed, then call this tool. Only files inside the session working directory or the temp directory (/tmp) can be sent, and credential files (.env, keys, ~/.ssh, ~/.agent4discord, ~/.claude, ...) are always refused. This is the ONLY way to send files to the user in this Discord session.',
+    'Send a file to the current Discord channel where this session is running. Use this tool whenever the user asks you to attach, send, share, or upload a file or image to Discord. The file must exist on the local filesystem — create it first with Write or Bash if needed, then call this tool. Credential files are refused (.env, private keys, ~/.ssh, ~/.agent4discord, ~/.aws, Claude login credentials, ...). This is the ONLY way to send files to the user in this Discord session.',
     {
       path: z.string().describe('Absolute path to the file to send'),
       filename: z.string().optional().describe('Override the display filename (defaults to basename of path)'),

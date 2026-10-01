@@ -1,6 +1,5 @@
 // Session lifecycle -- AGE-016
 import fs from 'node:fs';
-import os from 'node:os';
 import nodePath from 'node:path';
 import { EventEmitter } from 'node:events';
 import {
@@ -83,7 +82,7 @@ class SessionManager extends EventEmitter {
 
     if (client) {
       mcpServers.discord = createDiscordToolServer(
-        this._buildSendFile(client, channelId, guildId, cwd),
+        this._buildSendFile(client, channelId, guildId),
       );
       allowedTools.push('mcp__discord__attach_file');
     }
@@ -180,7 +179,7 @@ class SessionManager extends EventEmitter {
 
     if (client) {
       mcpServers.discord = createDiscordToolServer(
-        this._buildSendFile(client, channelId, guildId, cwd),
+        this._buildSendFile(client, channelId, guildId),
       );
       allowedTools.push('mcp__discord__attach_file');
     }
@@ -320,14 +319,11 @@ class SessionManager extends EventEmitter {
     return [...this.sessions.values()];
   }
 
-  private _buildSendFile(client: Client, channelId: string, guildId: string, cwd: string) {
+  private _buildSendFile(client: Client, channelId: string, guildId: string) {
     return async (requestedPath: string, filename?: string): Promise<string> => {
       // Resolve symlinks first, then check where the file really is (see utils/attachPolicy.ts).
       const filePath = await fs.promises.realpath(requestedPath);
-      const roots = await Promise.all(
-        [cwd, os.tmpdir(), '/tmp'].map((p) => fs.promises.realpath(p).catch(() => nodePath.resolve(p))),
-      );
-      const refusal = attachRefusal(filePath, roots);
+      const refusal = attachRefusal(filePath);
       if (refusal) throw new Error(refusal);
 
       // Validate file exists

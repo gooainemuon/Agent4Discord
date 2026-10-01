@@ -11,8 +11,6 @@ const SENSITIVE_DIRS = new Set([
   '.ssh', '.gnupg', '.aws', '.azure', '.kube', '.docker', '.agent4discord', '.mcp-auth', '.config/gh',
 ]);
 
-/** Refused only directly under the home directory: a project's own .claude/ holds rules, not secrets. */
-const HOME_SENSITIVE_DIRS = new Set(['.claude']);
 
 /** File names that are credentials by convention. `.env.example` is allowed. */
 const SENSITIVE_FILES = [
@@ -20,7 +18,7 @@ const SENSITIVE_FILES = [
   /\.(pem|key|p12|pfx|keystore|jks)$/i,
   /^id_(rsa|dsa|ecdsa|ed25519)(\.pub)?$/,
   /^\.(netrc|npmrc|pypirc|git-credentials)$/,
-  /^credentials(\.json)?$/i,
+  /^\.?credentials(\.json)?$/i, // also ~/.claude/.credentials.json (Claude login)
 ];
 
 function isUnder(child: string, parent: string): boolean {
@@ -30,10 +28,10 @@ function isUnder(child: string, parent: string): boolean {
 
 /**
  * Return why `realPath` must not be attached, or null when it may.
- * `realPath` must already be resolved with fs.realpath (symlinks followed); `roots` likewise.
- * Allowed: files inside the session's working directory or the temp directory, minus credentials.
+ * `realPath` must already be resolved with fs.realpath (symlinks followed).
+ * Any location is allowed (user 2026-10-01) except credential folders and credential-looking files.
  */
-export function attachRefusal(realPath: string, roots: string[]): string | null {
+export function attachRefusal(realPath: string): string | null {
   const base = path.basename(realPath);
   if (base === '.env.example') {
     // explicitly fine
@@ -52,12 +50,5 @@ export function attachRefusal(realPath: string, roots: string[]): string | null 
     }
   }
 
-  if (relHome.length > 1 && HOME_SENSITIVE_DIRS.has(relHome[0])) {
-    return `Refusing to attach a file under "~/${relHome[0]}": that folder holds credentials.`;
-  }
-
-  if (!roots.some((root) => isUnder(realPath, root))) {
-    return 'Refusing to attach a file outside the session folder or the temp folder. Copy it into the project or /tmp first.';
-  }
   return null;
 }
