@@ -24,6 +24,11 @@ export async function startBot(): Promise<void> {
   void checkForUpdates();
   const config = loadConfig();
 
+  // One failed Discord call in an async listener must not take every session down with the process.
+  process.on('unhandledRejection', (reason) => {
+    console.error('[bot] Unhandled promise rejection:', reason);
+  });
+
   const client = new Client({
     intents: [
       GatewayIntentBits.Guilds,
@@ -86,10 +91,11 @@ export async function startBot(): Promise<void> {
         } catch (err) {
           console.error(`Error handling command "${interaction.commandName}":`, err);
           const reply = { content: 'An error occurred while processing the command.', ephemeral: true } as const;
+          // The interaction may have expired or the channel be gone: never throw from the error path.
           if (interaction.replied || interaction.deferred) {
-            await interaction.followUp(reply);
+            await interaction.followUp(reply).catch(() => {});
           } else {
-            await interaction.reply(reply);
+            await interaction.reply(reply).catch(() => {});
           }
         }
       }

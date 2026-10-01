@@ -37,7 +37,7 @@ export async function handleEffort(interaction: ChatInputCommandInteraction): Pr
   }
 
   const session = sessionManager.getSession(channel.id);
-  if (!session) {
+  if (!session || session.state === 'stopped' || session.state === 'archived') {
     await interaction.reply({ content: 'No active session in this channel.', flags: MessageFlags.Ephemeral });
     return;
   }
@@ -48,11 +48,12 @@ export async function handleEffort(interaction: ChatInputCommandInteraction): Pr
     return;
   }
 
+  await interaction.deferReply(); // the SDK call may take longer than Discord's 3 s ack window
   try {
     await session.query.applyFlagSettings({ effortLevel: level });
   } catch (err) {
     console.error('[effort] Failed to set effort:', err);
-    await interaction.reply({ content: `Failed to change effort: ${err}`, flags: MessageFlags.Ephemeral });
+    await interaction.editReply({ content: `Failed to change effort: ${err}` });
     return;
   }
 
@@ -64,5 +65,5 @@ export async function handleEffort(interaction: ChatInputCommandInteraction): Pr
   }
 
   // Not ephemeral: the change stays visible in the channel history.
-  await interaction.reply({ content: `Effort changed to **${level}** for this session (from the next turn).` });
+  await interaction.editReply({ content: `Effort changed to **${level}** for this session (from the next turn).` });
 }

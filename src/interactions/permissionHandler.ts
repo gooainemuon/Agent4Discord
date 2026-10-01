@@ -17,6 +17,9 @@ import { sessionManager } from '../sessions/sessionManager.js';
 // Auto-allow these safe tools
 const AUTO_ALLOW_TOOLS = new Set(['Read', 'Glob', 'Grep', 'LSP']);
 
+// Tools whose "Always Allow" would be far broader than the one request shown.
+const NO_ALWAYS_ALLOW = new Set(['Bash']);
+
 interface PendingPermission {
   resolve: (result: PermissionResult) => void;
   channelId: string;
@@ -80,18 +83,25 @@ export async function requestPermission(
     .setTitle(`${emoji} Permission Request`)
     .setDescription(`**Tool:** ${toolName}\n\n${inputPreview.slice(0, 3000)}`)
     .setColor(COLORS.PERMISSION)
-    .setFooter({ text: `Expires in 60 seconds` });
+    .setFooter({ text: 'Waits until you answer. Denied if the session ends.' });
 
-  // Build buttons
+  // Build buttons. No "Always Allow" for Bash: it is remembered per tool name, so one click would
+  // allow every later shell command in the channel (rm -rf, push --force, curl | sh). Allow recurring
+  // commands with settings.json rules instead.
+  const offerAlways = !NO_ALWAYS_ALLOW.has(toolName);
   const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`a4d:perm:${requestId}:allow`)
       .setLabel('Allow')
       .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`a4d:perm:${requestId}:always`)
-      .setLabel('Always Allow')
-      .setStyle(ButtonStyle.Primary),
+    ...(offerAlways
+      ? [
+          new ButtonBuilder()
+            .setCustomId(`a4d:perm:${requestId}:always`)
+            .setLabel('Always Allow')
+            .setStyle(ButtonStyle.Primary),
+        ]
+      : []),
     new ButtonBuilder()
       .setCustomId(`a4d:perm:${requestId}:deny`)
       .setLabel('Deny')
@@ -124,6 +134,12 @@ export async function requestPermission(
       toolName,
       toolInput,
     });
+
+    // The session may have ended while the message was being sent: 'stopped' found nothing to cancel then.
+    const live = sessionManager.getSession(channel.id);
+    if (!live || live.state === 'stopped' || live.state === 'archived') {
+      pendingPermissions.get(requestId)?.cancel();
+    }
   });
 }
 
@@ -163,8 +179,8 @@ export async function handlePermission(interaction: ButtonInteraction): Promise<
     const embed = EmbedBuilder.from(interaction.message.embeds[0])
       .setTitle('Permission Granted')
       .setColor(COLORS.IDLE);
-    await interaction.update({ embeds: [embed], components: [buildDisabledRow()] });
-    pending.resolve({ behavior: 'allow', updatedInput: {} });
+    pending.resolve({ behavior: 'allow', updatedInput: {} }); // first: a failed edit must not leave the tool waiting
+    await interaction.update({ embeds: [embed], components: [buildDisabledRow()] }).catch(() => {});
   } else if (action === 'always') {
     // Add to always-allowed set for this channel/session
     if (!alwaysAllowedTools.has(pending.channelId)) {
@@ -175,14 +191,14 @@ export async function handlePermission(interaction: ButtonInteraction): Promise<
     const embed = EmbedBuilder.from(interaction.message.embeds[0])
       .setTitle(`Permission Granted (Always: ${pending.toolName})`)
       .setColor(COLORS.IDLE);
-    await interaction.update({ embeds: [embed], components: [buildDisabledRow()] });
-    pending.resolve({ behavior: 'allow', updatedInput: {} });
+    pending.resolve({ behavior: 'allow', updatedInput: {} }); // first: a failed edit must not leave the tool waiting
+    await interaction.update({ embeds: [embed], components: [buildDisabledRow()] }).catch(() => {});
   } else if (action === 'deny') {
     const embed = EmbedBuilder.from(interaction.message.embeds[0])
       .setTitle('Permission Denied')
       .setColor(COLORS.STOPPED);
-    await interaction.update({ embeds: [embed], components: [buildDisabledRow()] });
     pending.resolve({ behavior: 'deny', message: 'User denied via Discord' });
+    await interaction.update({ embeds: [embed], components: [buildDisabledRow()] }).catch(() => {});
   }
 }
 
