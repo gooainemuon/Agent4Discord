@@ -15,6 +15,7 @@ import {
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { AttachmentBuilder, GuildPremiumTier, type Client, type TextChannel } from 'discord.js';
 import { resolvePlugins } from '../utils/plugins.js';
+import { getClaudeExecutable } from '../utils/claudeCli.js';
 import { createDiscordToolServer, getUploadLimit } from '../tools/discordTools.js';
 
 export type SessionState = 'idle' | 'running' | 'stopped' | 'archived';
@@ -78,6 +79,7 @@ class SessionManager extends EventEmitter {
       options: {
         cwd,
         model: model || 'opus',
+        pathToClaudeCodeExecutable: getClaudeExecutable(),
         permissionMode: permissionMode === 'plan' ? 'plan' : 'default',
         includePartialMessages: true,
         abortController: controller,
@@ -163,6 +165,7 @@ class SessionManager extends EventEmitter {
       options: {
         cwd,
         model: model || 'opus',
+        pathToClaudeCodeExecutable: getClaudeExecutable(),
         permissionMode: permissionMode === 'plan' ? 'plan' : 'default',
         includePartialMessages: true,
         abortController: controller,

@@ -16,6 +16,8 @@ import { processAttachments } from './utils/attachments.js';
 import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { checkForUpdates } from './utils/updateCheck.js';
 import { setupAutoArchive } from './sessions/autoArchive.js';
+import { setupModelCatalog } from './sessions/modelCatalog.js';
+import { handleModelAutocomplete } from './commands/model.js';
 
 export async function startBot(): Promise<void> {
   void checkForUpdates();
@@ -70,6 +72,18 @@ export async function startBot(): Promise<void> {
             await interaction.reply(reply);
           }
         }
+      }
+      return;
+    }
+
+    // Autocomplete (only /a4d model uses it)
+    if (interaction.isAutocomplete()) {
+      try {
+        if (interaction.commandName === 'a4d' && interaction.options.getSubcommand() === 'model') {
+          await handleModelAutocomplete(interaction);
+        }
+      } catch (err) {
+        console.error('Error handling autocomplete:', err);
       }
       return;
     }
@@ -171,6 +185,7 @@ export async function startBot(): Promise<void> {
   client.once(Events.ClientReady, () => {
     setupUsageTracker(client);
     setupAutoArchive(client);
+    setupModelCatalog();
   });
 
   // Start

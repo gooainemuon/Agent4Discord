@@ -35,11 +35,7 @@ const a4dCommand = new SlashCommandBuilder()
         opt.setName('model')
           .setDescription('Model to use')
           .setRequired(true)
-          .addChoices(
-            { name: 'Opus 4.7 (most capable)', value: 'opus' },
-            { name: 'Sonnet 4.6 (fast)', value: 'sonnet' },
-            { name: 'Haiku 4.5 (fastest)', value: 'haiku' },
-          )
+          .setAutocomplete(true)
       )
   )
   .addSubcommand((sub) =>
