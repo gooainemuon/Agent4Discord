@@ -16,6 +16,7 @@ import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { AttachmentBuilder, GuildPremiumTier, type Client, type TextChannel } from 'discord.js';
 import { resolvePlugins } from '../utils/plugins.js';
 import { createDiscordToolServer, getUploadLimit } from '../tools/discordTools.js';
+import { sessionContextOptions } from './sessionContext.js';
 
 export type SessionState = 'idle' | 'running' | 'stopped' | 'archived';
 
@@ -77,6 +78,7 @@ class SessionManager extends EventEmitter {
       prompt: messageStream(),
       options: {
         cwd,
+        ...sessionContextOptions(cwd),
         model: model || 'opus',
         permissionMode: permissionMode === 'plan' ? 'plan' : 'default',
         includePartialMessages: true,
@@ -162,6 +164,7 @@ class SessionManager extends EventEmitter {
       prompt: messageStream(),
       options: {
         cwd,
+        ...sessionContextOptions(cwd),
         model: model || 'opus',
         permissionMode: permissionMode === 'plan' ? 'plan' : 'default',
         includePartialMessages: true,
