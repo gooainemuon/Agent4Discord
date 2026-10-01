@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
-import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk';
+import type { EffortLevel, PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { CONFIG_DIR } from './config.js';
 
 export interface GuildConfig {
@@ -24,6 +24,8 @@ export interface SessionEntry {
   userId: string;
   /** Effort picked at start or with /a4d effort; reapplied on resume. Absent = settings.json. */
   effort?: EffortLevel;
+  /** Permission mode picked at start or with /a4d permission; reapplied on resume. */
+  permissionMode?: PermissionMode;
 }
 
 const GUILDS_DIR = path.join(CONFIG_DIR, 'guilds');

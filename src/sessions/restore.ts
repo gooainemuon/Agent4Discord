@@ -70,6 +70,9 @@ async function restoreUnlocked(
 
   // Checked after the awaits above and with no await before resumeSession, so nothing can slip in.
   const live = sessionManager.getSession(channel.id);
+  // Stop and Archive delete the stored entry, so fall back to the stopped session still in memory.
+  const effort = stored?.effort ?? live?.effort;
+  const permissionMode = stored?.permissionMode ?? live?.permissionMode;
   if (live && live.state !== 'stopped' && live.state !== 'archived') {
     return { ok: false, reason: 'This session is already active.' };
   }
@@ -93,27 +96,31 @@ async function restoreUnlocked(
     model,
     createPermissionCallback(channel, userId),
     client,
-    undefined, // permission mode
+    permissionMode,
     false, // forkSession
-    stored?.effort,
+    effort,
   );
-  saveSessionToGuild(guildId, channel.id, sessionId, cwd, userId, stored?.effort);
+  saveSessionToGuild(guildId, channel.id, sessionId, cwd, userId, effort, permissionMode);
 
-  await statusMsg.edit({
-    embeds: [
-      buildStatusEmbed({
-        status: 'Session Active',
-        color: COLORS.IDLE,
-        cwd: rawCwd,
-        model,
-        sessionId,
-        costUsd: session.totalCostUsd,
-        startedAt: new Date().toISOString(),
-      }),
-    ],
-  });
+  // Best-effort: the session is already running, so a failed edit must not report a failed resume.
+  await statusMsg
+    .edit({
+      embeds: [
+        buildStatusEmbed({
+          status: 'Session Active',
+          color: COLORS.IDLE,
+          cwd: rawCwd,
+          model,
+          sessionId,
+          costUsd: session.totalCostUsd,
+          startedAt: new Date().toISOString(),
+          permissionMode,
+        }),
+      ],
+    })
+    .catch((err) => console.warn('[restore] Failed to update status embed:', err));
 
-  return { ok: true, sessionId, cwd, effort: stored?.effort };
+  return { ok: true, sessionId, cwd, effort };
 }
 
 /**
@@ -126,6 +133,8 @@ export async function autoResumeSessions(
 ): Promise<void> {
   for (const { guildId, sessionsCategoryId, entries } of guilds) {
     for (const [channelId, entry] of Object.entries(entries)) {
+      // Re-read: while earlier channels were being resumed the user may have closed or stopped this one.
+      if (!getSessionsForGuild(guildId)[channelId]) continue;
       const existing = sessionManager.getSession(channelId);
       if (existing && existing.state !== 'stopped' && existing.state !== 'archived') continue;
       let channel: TextChannel | null = null;

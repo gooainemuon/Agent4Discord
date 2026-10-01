@@ -1,5 +1,5 @@
 // Persist session metadata to guild config -- AGE-016
-import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk';
+import type { EffortLevel, PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import {
   loadGuildConfig,
   saveGuildConfig,
@@ -13,6 +13,7 @@ export function saveSessionToGuild(
   cwd: string,
   userId: string,
   effort?: EffortLevel,
+  permissionMode?: PermissionMode,
 ): void {
   const config = loadGuildConfig(guildId);
   if (!config) {
@@ -25,6 +26,7 @@ export function saveSessionToGuild(
     createdAt: new Date().toISOString(),
     userId,
     ...(effort && { effort }),
+    ...(permissionMode && permissionMode !== 'default' && { permissionMode }),
   };
 
   saveGuildConfig(config);
@@ -45,6 +47,15 @@ export function updateSessionEffortInGuild(guildId: string, channelId: string, e
   const entry = config?.activeSessions[channelId];
   if (!config || !entry || entry.effort === effort) return;
   entry.effort = effort;
+  saveGuildConfig(config);
+}
+
+/** Remember a channel's permission mode so a resume starts with it again. */
+export function updateSessionPermissionInGuild(guildId: string, channelId: string, mode: PermissionMode): void {
+  const config = loadGuildConfig(guildId);
+  const entry = config?.activeSessions[channelId];
+  if (!config || !entry || entry.permissionMode === mode) return;
+  entry.permissionMode = mode;
   saveGuildConfig(config);
 }
 

@@ -55,7 +55,7 @@ export async function handleFork(
 
   // Enforce concurrent session limit
   const userSessions = sessionManager.getAllSessions().filter(
-    (s) => s.userId === interaction.user.id && s.guildId === guild.id,
+    (s) => s.userId === interaction.user.id && s.guildId === guild.id && s.state !== 'stopped' && s.state !== 'archived',
   );
   const maxSessions = loadConfig().maxSessionsPerUser;
   if (userSessions.length >= maxSessions) {

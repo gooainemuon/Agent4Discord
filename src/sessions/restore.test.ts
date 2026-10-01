@@ -121,5 +121,22 @@ describe('restoreChannelSession', () => {
     expect(resume).not.toHaveBeenCalled();
     sessionManager.releaseSessionId('sid-5');
   });
+
+  it('after Stop (entry deleted) still resumes with the effort and permission mode of the stopped session', async () => {
+    writeGuild({}); // Stop/Archive removed the stored entry
+    const { sessionManager, resume, restoreChannelSession } = await load();
+    const map = (sessionManager as unknown as { sessions: Map<string, unknown> }).sessions;
+    map.set('ch6', { channelId: 'ch6', sessionId: 'sid-6', state: 'stopped', effort: 'max', permissionMode: 'plan' });
+    try {
+      const result = await restoreChannelSession(fakeChannel('ch6', 'sid-6').channel, GUILD, 'u', client);
+      expect(result).toMatchObject({ ok: true, effort: 'max' });
+      expect(resume.mock.calls[0][8]).toBe('plan');
+      expect(resume.mock.calls[0][10]).toBe('max');
+      const saved = JSON.parse(fs.readFileSync(nodePath.join(home, '.agent4discord', 'guilds', `${GUILD}.json`), 'utf-8'));
+      expect(saved.activeSessions.ch6).toMatchObject({ effort: 'max', permissionMode: 'plan' });
+    } finally {
+      map.delete('ch6');
+    }
+  });
 });
 

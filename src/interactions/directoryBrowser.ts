@@ -415,7 +415,7 @@ export async function handleSessionStart(interaction: ButtonInteraction): Promis
 
   // Enforce concurrent session limit
   const userSessions = sessionManager.getAllSessions().filter(
-    (s) => s.userId === interaction.user.id && s.guildId === guild.id,
+    (s) => s.userId === interaction.user.id && s.guildId === guild.id && s.state !== 'stopped' && s.state !== 'archived',
   );
   const maxSessions = loadConfig().maxSessionsPerUser;
   if (userSessions.length >= maxSessions) {
@@ -572,7 +572,7 @@ export async function handleModelConfirm(interaction: ButtonInteraction): Promis
 
   // Re-check concurrent session limit
   const userSessions = sessionManager.getAllSessions().filter(
-    (s) => s.userId === interaction.user.id && s.guildId === guild.id,
+    (s) => s.userId === interaction.user.id && s.guildId === guild.id && s.state !== 'stopped' && s.state !== 'archived',
   );
   const maxSessions = loadConfig().maxSessionsPerUser;
   if (userSessions.length >= maxSessions) {
@@ -614,7 +614,7 @@ export async function handleModelConfirm(interaction: ButtonInteraction): Promis
     );
 
     // Persist to guild config
-    saveSessionToGuild(guild.id, channel.id, session.sessionId || '', cwdPath, interaction.user.id, session.effort);
+    saveSessionToGuild(guild.id, channel.id, session.sessionId || '', cwdPath, interaction.user.id, session.effort, session.permissionMode);
 
     // Post and pin status embed with controls
     const statusEmbed = buildStatusEmbed({
@@ -835,7 +835,7 @@ export async function handleResumeStart(interaction: ButtonInteraction): Promise
 
   // Enforce concurrent session limit
   const userSessions = sessionManager.getAllSessions().filter(
-    (s) => s.userId === interaction.user.id && s.guildId === guild.id,
+    (s) => s.userId === interaction.user.id && s.guildId === guild.id && s.state !== 'stopped' && s.state !== 'archived',
   );
   const maxSessions = loadConfig().maxSessionsPerUser;
   if (userSessions.length >= maxSessions) {

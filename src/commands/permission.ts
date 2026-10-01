@@ -10,6 +10,7 @@ import {
 } from 'discord.js';
 import type { PermissionMode } from '@anthropic-ai/claude-agent-sdk';
 import { sessionManager } from '../sessions/sessionManager.js';
+import { updateSessionPermissionInGuild } from '../sessions/sessionStore.js';
 import { loadGuildConfig } from '../guild.js';
 import { buildStatusEmbed, COLORS } from '../formatters/embedBuilder.js';
 
@@ -95,7 +96,21 @@ export async function handlePermissionModeChange(
     return;
   }
 
+  // The SDK only knows plan vs. default here: acceptEdits and bypassPermissions are applied by the
+  // bot's canUseTool. Without this call a session started in plan mode stayed in plan mode.
+  try {
+    await session.query.setPermissionMode(selected === 'plan' ? 'plan' : 'default');
+  } catch (err) {
+    console.error('[permission] Failed to set permission mode:', err);
+    await interaction.reply({ content: `Failed to change permission mode: ${err}`, flags: MessageFlags.Ephemeral });
+    return;
+  }
   session.permissionMode = selected;
+  try {
+    updateSessionPermissionInGuild(session.guildId, channel.id, selected);
+  } catch (err) {
+    console.warn('[permission] Failed to persist permission mode:', err);
+  }
 
   // Update the pinned status embed
   try {
