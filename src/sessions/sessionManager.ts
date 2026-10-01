@@ -58,6 +58,8 @@ class SessionManager extends EventEmitter {
   ): ActiveSession {
     const controller = new AbortController();
 
+    this._closeLiveSession(channelId);
+
     let resolveNext: ((msg: SDKUserMessage) => void) | null = null;
     // Messages sent before the SDK asks for the next one (e.g. right after start or resume) wait here.
     const pending: SDKUserMessage[] = [];
@@ -152,6 +154,8 @@ class SessionManager extends EventEmitter {
     effort?: EffortLevel,
   ): ActiveSession {
     const controller = new AbortController();
+
+    this._closeLiveSession(channelId);
 
     let resolveNext: ((msg: SDKUserMessage) => void) | null = null;
     // Messages sent before the SDK asks for the next one (e.g. right after start or resume) wait here.
@@ -253,6 +257,32 @@ class SessionManager extends EventEmitter {
       resolve(msg);
     } else {
       session.pendingMessages.push(msg); // the stream is not waiting yet: do not drop the message
+    }
+  }
+
+  /** Session ids being attached to a channel right now (between the duplicate check and resumeSession). */
+  private claimedSessionIds = new Set<string>();
+
+  /**
+   * Reserve a Claude session id before an async gap (channel creation) so a second click cannot pass
+   * the duplicate check meanwhile. False when another channel runs it or is about to.
+   */
+  claimSessionId(sessionId: string, exceptChannelId?: string): boolean {
+    if (this.claimedSessionIds.has(sessionId) || this.findActiveBySessionId(sessionId, exceptChannelId)) return false;
+    this.claimedSessionIds.add(sessionId);
+    return true;
+  }
+
+  releaseSessionId(sessionId: string): void {
+    this.claimedSessionIds.delete(sessionId);
+  }
+
+  /** A channel gets a new query: close a still-running one first so it cannot keep going unseen. */
+  private _closeLiveSession(channelId: string): void {
+    const existing = this.sessions.get(channelId);
+    if (existing && existing.state !== 'stopped' && existing.state !== 'archived') {
+      console.warn(`[session] Channel ${channelId} already had a live session; closing it before starting another`);
+      this.stopSession(channelId);
     }
   }
 

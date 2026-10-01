@@ -26,7 +26,25 @@ async function findStatusMessage(channel: TextChannel, botId: string | undefined
  * status embed, falling back to the id stored for this channel. Never picks "the newest session in
  * the directory", and refuses a session another channel already runs.
  */
+/** Channels with a restore in flight: auto-resume and /a4d resume must not both attach one. */
+const restoring = new Set<string>();
+
 export async function restoreChannelSession(
+  channel: TextChannel,
+  guildId: string,
+  userId: string,
+  client: Client,
+): Promise<RestoreResult> {
+  if (restoring.has(channel.id)) return { ok: false, reason: 'This channel is already being resumed.' };
+  restoring.add(channel.id);
+  try {
+    return await restoreUnlocked(channel, guildId, userId, client);
+  } finally {
+    restoring.delete(channel.id);
+  }
+}
+
+async function restoreUnlocked(
   channel: TextChannel,
   guildId: string,
   userId: string,
@@ -50,13 +68,21 @@ export async function restoreChannelSession(
     return { ok: false, reason: 'No session id recorded for this channel. Start a new session instead.' };
   }
 
-  const holder = sessionManager.findActiveBySessionId(sessionId, channel.id);
-  if (holder) {
+  // Checked after the awaits above and with no await before resumeSession, so nothing can slip in.
+  const live = sessionManager.getSession(channel.id);
+  if (live && live.state !== 'stopped' && live.state !== 'archived') {
+    return { ok: false, reason: 'This session is already active.' };
+  }
+  if (!sessionManager.claimSessionId(sessionId, channel.id)) {
+    const holder = sessionManager.findActiveBySessionId(sessionId, channel.id);
     return {
       ok: false,
-      reason: `This session is already open in <#${holder.channelId}>. Close it there first, or use \`/a4d fork\` there to branch it.`,
+      reason: holder
+        ? `This session is already open in <#${holder.channelId}>. Close it there first, or use \`/a4d fork\` there to branch it.`
+        : 'This session is being opened in another channel right now.',
     };
   }
+  sessionManager.releaseSessionId(sessionId); // resumeSession below registers it synchronously
 
   const session = sessionManager.resumeSession(
     guildId,

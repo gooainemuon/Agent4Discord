@@ -833,16 +833,6 @@ export async function handleResumeStart(interaction: ButtonInteraction): Promise
     return;
   }
 
-  // One Claude session per channel: resuming it again would put two channels on one transcript.
-  const holder = sessionManager.findActiveBySessionId(state.selectedSessionId);
-  if (holder) {
-    await interaction.reply({
-      content: `That session is already open in <#${holder.channelId}>. Use that channel, or \`/a4d fork\` there to branch it.`,
-      ephemeral: true,
-    });
-    return;
-  }
-
   // Enforce concurrent session limit
   const userSessions = sessionManager.getAllSessions().filter(
     (s) => s.userId === interaction.user.id && s.guildId === guild.id,
@@ -856,71 +846,89 @@ export async function handleResumeStart(interaction: ButtonInteraction): Promise
     return;
   }
 
-  await interaction.deferUpdate();
+  // One Claude session per channel: resuming it again would put two channels on one transcript.
+  // Claimed synchronously, before the awaits below, so a second click cannot slip through.
+  const sessionId = state.selectedSessionId;
+  if (!sessionManager.claimSessionId(sessionId)) {
+    const holder = sessionManager.findActiveBySessionId(sessionId);
+    await interaction.reply({
+      content: holder
+        ? `That session is already open in <#${holder.channelId}>. Use that channel, or \`/a4d fork\` there to branch it.`
+        : 'That session is being opened in another channel right now.',
+      ephemeral: true,
+    });
+    return;
+  }
 
   try {
-    // Create session channel under Sessions category
-    const dirName = path.basename(state.path) || 'home';
-    const channel = await guild.channels.create({
-      name: `a4d-${dirName}`.slice(0, 100).toLowerCase(),
-      type: ChannelType.GuildText,
-      parent: guildConfig.sessionsCategoryId,
-    });
+    await interaction.deferUpdate();
 
-    // Resume Claude Code session (default permission mode for resumes)
-    const session = sessionManager.resumeSession(
-      guild.id,
-      interaction.user.id,
-      channel.id,
-      state.selectedSessionId,
-      state.path,
-      undefined, // model
-      createPermissionCallback(channel as TextChannel, interaction.user.id),
-      interaction.client,
-      'default', // permissionMode
-    );
+    try {
+      // Create session channel under Sessions category
+      const dirName = path.basename(state.path) || 'home';
+      const channel = await guild.channels.create({
+        name: `a4d-${dirName}`.slice(0, 100).toLowerCase(),
+        type: ChannelType.GuildText,
+        parent: guildConfig.sessionsCategoryId,
+      });
 
-    // Persist to guild config
-    saveSessionToGuild(guild.id, channel.id, session.sessionId, state.path, interaction.user.id);
+      // Resume Claude Code session (default permission mode for resumes)
+      const session = sessionManager.resumeSession(
+        guild.id,
+        interaction.user.id,
+        channel.id,
+        state.selectedSessionId,
+        state.path,
+        undefined, // model
+        createPermissionCallback(channel as TextChannel, interaction.user.id),
+        interaction.client,
+        'default', // permissionMode
+      );
 
-    // Post and pin status embed with controls
-    const statusEmbed = buildStatusEmbed({
-      status: 'Session Active',
-      color: COLORS.IDLE,
-      cwd: displayPath(state.path),
-      model: 'opus',
-      sessionId: session.sessionId || 'pending',
-      costUsd: 0,
-      startedAt: new Date().toISOString(),
-      permissionMode: 'default',
-    });
+      // Persist to guild config
+      saveSessionToGuild(guild.id, channel.id, session.sessionId, state.path, interaction.user.id);
 
-    const statusMsg = await channel.send({ embeds: [statusEmbed] });
-    await statusMsg.pin().catch((err) => console.warn('[session] Failed to pin status embed:', err.message));
+      // Post and pin status embed with controls
+      const statusEmbed = buildStatusEmbed({
+        status: 'Session Active',
+        color: COLORS.IDLE,
+        cwd: displayPath(state.path),
+        model: 'opus',
+        sessionId: session.sessionId || 'pending',
+        costUsd: 0,
+        startedAt: new Date().toISOString(),
+        permissionMode: 'default',
+      });
 
-    // Post previous conversation history
-    await postSessionHistory(channel as TextChannel, state.selectedSessionId, state.path);
+      const statusMsg = await channel.send({ embeds: [statusEmbed] });
+      await statusMsg.pin().catch((err) => console.warn('[session] Failed to pin status embed:', err.message));
 
-    // Stay in the folder the session was resumed from; jumping back to home hid where the browser was.
-    const browserMsg = await buildBrowserMessage(state.path);
-    await interaction.editReply(browserMsg);
+      // Post previous conversation history
+      await postSessionHistory(channel as TextChannel, state.selectedSessionId, state.path);
 
-    // Send followup linking to the new channel
-    const followUpMsg = await interaction.followUp({
-      content: `Session resumed in <#${channel.id}>`,
-      ephemeral: true,
-    });
+      // Stay in the folder the session was resumed from; jumping back to home hid where the browser was.
+      const browserMsg = await buildBrowserMessage(state.path);
+      await interaction.editReply(browserMsg);
 
-    // Auto-delete after 60 seconds
-    setTimeout(async () => {
-      try { await followUpMsg.delete(); } catch { /* already deleted */ }
-    }, 60_000);
-  } catch (err) {
-    console.error('[resume-start] Failed to resume session:', err);
-    await interaction.followUp({
-      content: 'Failed to resume session. Make sure the bot has permission to create channels.',
-      ephemeral: true,
-    });
+      // Send followup linking to the new channel
+      const followUpMsg = await interaction.followUp({
+        content: `Session resumed in <#${channel.id}>`,
+        ephemeral: true,
+      });
+
+      // Auto-delete after 60 seconds
+      setTimeout(async () => {
+        try { await followUpMsg.delete(); } catch { /* already deleted */ }
+      }, 60_000);
+    } catch (err) {
+      console.error('[resume-start] Failed to resume session:', err);
+      await interaction.followUp({
+        content: 'Failed to resume session. Make sure the bot has permission to create channels.',
+        ephemeral: true,
+      }).catch(() => {});
+    }
+  } finally {
+    sessionManager.releaseSessionId(sessionId);
   }
 }
 

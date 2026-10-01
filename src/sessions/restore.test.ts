@@ -99,4 +99,27 @@ describe('restoreChannelSession', () => {
     expect(result).toMatchObject({ ok: false });
     expect(resume).not.toHaveBeenCalled();
   });
+
+  it('refuses a second restore of the same channel while the first is still running', async () => {
+    writeGuild({ ch4: { sessionId: 'sid-4', cwd: '/proj', createdAt: 't', userId: 'u' } });
+    const { resume, restoreChannelSession } = await load();
+    const { channel } = fakeChannel('ch4', 'sid-4');
+    const [a, b] = await Promise.all([
+      restoreChannelSession(channel, GUILD, 'u', client),
+      restoreChannelSession(channel, GUILD, 'u', client),
+    ]);
+    expect([a.ok, b.ok].sort()).toEqual([false, true]);
+    expect(resume).toHaveBeenCalledTimes(1);
+  });
+
+  it('refuses a session id that another path has claimed (Resume button in flight)', async () => {
+    writeGuild({});
+    const { sessionManager, resume, restoreChannelSession } = await load();
+    expect(sessionManager.claimSessionId('sid-5')).toBe(true);
+    const result = await restoreChannelSession(fakeChannel('ch5', 'sid-5').channel, GUILD, 'u', client);
+    expect(result).toMatchObject({ ok: false });
+    expect(resume).not.toHaveBeenCalled();
+    sessionManager.releaseSessionId('sid-5');
+  });
 });
+
