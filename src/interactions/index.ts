@@ -1,4 +1,5 @@
 import type { ButtonInteraction, MessageComponentInteraction, ModalSubmitInteraction, StringSelectMenuInteraction } from 'discord.js';
+import { splitStateKey } from './browserState.js';
 import {
   handleCreateDir,
   handleCreateDirSubmit,
@@ -45,7 +46,8 @@ import { handleShutdownButton } from '../sessions/lifecycle.js';
 export async function routeInteraction(
   interaction: MessageComponentInteraction
 ): Promise<void> {
-  const customId = interaction.customId;
+  // Directory-browser components carry a state key suffix ("~<key>"); route on the base id.
+  const customId = splitStateKey(interaction.customId).base;
 
   if (customId.startsWith('a4d:dir:browse')) {
     // The select menu id carries a per-render suffix (see buildBrowserMessage).

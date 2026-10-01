@@ -21,6 +21,7 @@ import {
 import { listSessions, getSessionMessages, type PermissionMode, type SDKSessionInfo } from '@anthropic-ai/claude-agent-sdk';
 import { isPathSafe, listDirectories } from '../utils/filesystem.js';
 import { DEFAULT_MODEL, modelLabel, modelSelectOptions } from '../utils/models.js';
+import { loadBrowserState, saveBrowserState, splitStateKey, withStateKey } from './browserState.js';
 import { loadConfig } from '../config.js';
 import { chunkMessage } from '../formatters/chunker.js';
 import { loadGuildConfig } from '../guild.js';
@@ -51,9 +52,16 @@ interface FooterState {
   page: number;
   mode?: 'browse' | 'resume';
   selectedSessionId?: string;
+  /** Neither a state key nor a footer was found; `path` is only the home fallback. */
+  unknown?: boolean;
 }
 
 function parseFooterState(interaction: ButtonInteraction | StringSelectMenuInteraction): FooterState {
+  // 1) state key on the clicked component (does not depend on the embed being visible)
+  const stored = loadBrowserState(splitStateKey(interaction.customId).key);
+  if (stored) return stored;
+
+  // 2) legacy: embed footer
   const text = interaction.message.embeds[0]?.footer?.text ?? '';
 
   // New format: "path | pN" or "path | pN | mode:resume | sid:xxx"
@@ -87,8 +95,11 @@ function parseFooterState(interaction: ButtonInteraction | StringSelectMenuInter
     // ignore
   }
 
-  return { path: HOMEDIR, page: 0 };
+  return { path: HOMEDIR, page: 0, unknown: true };
 }
+
+const LOST_STATE =
+  'This browser lost track of its folder (its embed may have been removed). Press Cancel to reload it at home, then go into the project folder again.';
 
 export function displayPath(fullPath: string): string {
   if (fullPath === HOMEDIR) return '~';
@@ -110,6 +121,8 @@ export async function buildBrowserMessage(
   page = 0,
 ): Promise<{ embeds: EmbedBuilder[]; components: ActionRowBuilder<MessageActionRowComponentBuilder>[] }> {
   const resolvedPath = path.resolve(dirPath);
+  const key = saveBrowserState({ path: resolvedPath, page });
+  const id = (base: string) => withStateKey(base, key);
 
   // Embed -- footer encodes state as "path | pN"
   // Session Start uses this directory, not whatever the dropdown last showed.
@@ -136,8 +149,9 @@ export async function buildBrowserMessage(
   // A fresh custom id per render: Discord keeps showing the last picked option of a select menu
   // whose id did not change, which looked like "this folder is selected" after moving into it.
   const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId(`a4d:dir:browse:${Date.now().toString(36)}`)
-    .setPlaceholder('Go into a subfolder...');
+    .setCustomId(id(`a4d:dir:browse:${Date.now().toString(36)}`))
+    // The placeholder also names the folder: it stays visible even when the embed is hidden.
+    .setPlaceholder(`📂 ${displayPath(resolvedPath)} — go into a subfolder…`.slice(0, 150));
 
   if (dirs.length === 0) {
     selectMenu.addOptions({
@@ -162,30 +176,30 @@ export async function buildBrowserMessage(
   const atRoot = path.dirname(resolvedPath) === resolvedPath;
 
   const parentButton = new ButtonBuilder()
-    .setCustomId('a4d:dir:parent')
+    .setCustomId(id('a4d:dir:parent'))
     .setLabel('Parent')
     .setStyle(ButtonStyle.Secondary)
     .setDisabled(atRoot);
 
   const folderName = path.basename(resolvedPath) || resolvedPath;
   const startButton = new ButtonBuilder()
-    .setCustomId('a4d:dir:start')
+    .setCustomId(id('a4d:dir:start'))
     .setLabel(`Session Start · ${atHome ? '~ (home)' : folderName}`.slice(0, 80))
     .setStyle(ButtonStyle.Success);
 
   const resumeButton = new ButtonBuilder()
-    .setCustomId('a4d:dir:resume')
+    .setCustomId(id('a4d:dir:resume'))
     .setLabel('Resume Session')
     .setStyle(ButtonStyle.Primary);
 
   const createButton = new ButtonBuilder()
-    .setCustomId('a4d:dir:create')
+    .setCustomId(id('a4d:dir:create'))
     .setLabel('Create')
     .setStyle(ButtonStyle.Secondary)
     .setEmoji('\uD83D\uDCC1');
 
   const cancelButton = new ButtonBuilder()
-    .setCustomId('a4d:dir:cancel')
+    .setCustomId(id('a4d:dir:cancel'))
     .setLabel('Cancel')
     .setStyle(ButtonStyle.Danger);
 
@@ -203,19 +217,19 @@ export async function buildBrowserMessage(
   const totalPages = Math.max(1, Math.ceil(dirs.length / MAX_SELECT_OPTIONS));
   if (totalPages > 1) {
     const prevButton = new ButtonBuilder()
-      .setCustomId('a4d:dir:prev')
+      .setCustomId(id('a4d:dir:prev'))
       .setLabel('Previous')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page <= 0);
 
     const pageInfo = new ButtonBuilder()
-      .setCustomId('a4d:dir:pageinfo')
+      .setCustomId(id('a4d:dir:pageinfo'))
       .setLabel(`Page ${page + 1}/${totalPages}`)
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(true);
 
     const nextButton = new ButtonBuilder()
-      .setCustomId('a4d:dir:next')
+      .setCustomId(id('a4d:dir:next'))
       .setLabel('Next')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(page >= totalPages - 1);
@@ -301,6 +315,10 @@ export async function handleDirectoryNext(interaction: ButtonInteraction): Promi
  */
 export async function handleCreateDir(interaction: ButtonInteraction): Promise<void> {
   const state = parseFooterState(interaction);
+  if (state.unknown) {
+    await interaction.reply({ content: LOST_STATE, ephemeral: true });
+    return;
+  }
 
   // Store current path so the modal submit handler can retrieve it
   createDirPathStore.set(interaction.user.id, state.path);
@@ -377,6 +395,10 @@ function homeWarning(cwd: string): string {
  */
 export async function handleSessionStart(interaction: ButtonInteraction): Promise<void> {
   const state = parseFooterState(interaction);
+  if (state.unknown) {
+    await interaction.reply({ content: LOST_STATE, ephemeral: true });
+    return;
+  }
   const guild = interaction.guild;
 
   if (!guild) {
@@ -711,6 +733,9 @@ function buildResumePickerMessage(
     ? `${dirPath} | p0 | mode:resume | sid:${selectedSessionId}`
     : `${dirPath} | p0 | mode:resume`;
 
+  const key = saveBrowserState(footerState);
+  const id = (base: string) => withStateKey(base, key);
+
   const embed = new EmbedBuilder()
     .setTitle('Resume Existing Session')
     .setDescription(`Directory: ${displayPath(dirPath)}`)
@@ -723,7 +748,7 @@ function buildResumePickerMessage(
     .slice(0, MAX_SELECT_OPTIONS);
 
   const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId('a4d:resume:browse')
+    .setCustomId(id('a4d:resume:browse'))
     .setPlaceholder('Select a session to resume...');
 
   for (const sess of sorted) {
@@ -740,12 +765,12 @@ function buildResumePickerMessage(
   const selectRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(selectMenu);
 
   const backButton = new ButtonBuilder()
-    .setCustomId('a4d:resume:back')
+    .setCustomId(id('a4d:resume:back'))
     .setLabel('Back')
     .setStyle(ButtonStyle.Secondary);
 
   const resumeStartButton = new ButtonBuilder()
-    .setCustomId('a4d:resume:start')
+    .setCustomId(id('a4d:resume:start'))
     .setLabel('Resume')
     .setStyle(ButtonStyle.Success)
     .setDisabled(!selectedSessionId);
@@ -767,6 +792,10 @@ function buildResumePickerMessage(
  */
 export async function handleResumeSession(interaction: ButtonInteraction): Promise<void> {
   const state = parseFooterState(interaction);
+  if (state.unknown) {
+    await interaction.reply({ content: LOST_STATE, ephemeral: true });
+    return;
+  }
 
   let sessions: SDKSessionInfo[];
   try {
@@ -825,6 +854,10 @@ export async function handleResumeBack(interaction: ButtonInteraction): Promise<
  */
 export async function handleResumeStart(interaction: ButtonInteraction): Promise<void> {
   const state = parseFooterState(interaction);
+  if (state.unknown) {
+    await interaction.reply({ content: LOST_STATE, ephemeral: true });
+    return;
+  }
   const guild = interaction.guild;
 
   if (!state.selectedSessionId) {
