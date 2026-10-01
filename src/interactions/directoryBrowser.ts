@@ -20,6 +20,7 @@ import {
 } from 'discord.js';
 import { listSessions, getSessionMessages, type PermissionMode, type SDKSessionInfo } from '@anthropic-ai/claude-agent-sdk';
 import { isPathSafe, listDirectories } from '../utils/filesystem.js';
+import { DEFAULT_MODEL, modelLabel, modelSelectOptions } from '../utils/models.js';
 import { chunkMessage } from '../formatters/chunker.js';
 import { loadGuildConfig } from '../guild.js';
 import { sessionManager } from '../sessions/sessionManager.js';
@@ -391,9 +392,7 @@ export async function handleSessionStart(interaction: ButtonInteraction): Promis
     .setCustomId('a4d:model:select')
     .setPlaceholder('Select a model...')
     .addOptions(
-      { label: 'Opus 4.6 (most capable)', value: 'opus', default: true },
-      { label: 'Sonnet 4.6 (fast)', value: 'sonnet' },
-      { label: 'Haiku 4.5 (fastest)', value: 'haiku' },
+      ...modelSelectOptions(DEFAULT_MODEL),
     );
 
   const modelRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(modelSelect);
@@ -436,7 +435,7 @@ function parseModelFooter(interaction: ButtonInteraction | StringSelectMenuInter
   const text = interaction.message.embeds[0]?.footer?.text ?? '';
   const parts = text.split(' | ');
   const pathValue = parts[0] || os.homedir();
-  let model = 'opus';
+  let model = DEFAULT_MODEL;
   let perm: PermissionMode = 'default';
   const validPerms: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk'];
   for (const part of parts) {
@@ -462,19 +461,11 @@ export async function handleModelSelect(interaction: StringSelectMenuInteraction
 
   const { path: cwdPath, perm } = parseModelFooter(interaction);
 
-  const modelLabels: Record<string, string> = {
-    opus: 'Opus 4.6 (most capable)',
-    sonnet: 'Sonnet 4.6 (fast)',
-    haiku: 'Haiku 4.5 (fastest)',
-  };
-
   const modelSelect = new StringSelectMenuBuilder()
     .setCustomId('a4d:model:select')
     .setPlaceholder('Select a model...')
     .addOptions(
-      { label: 'Opus 4.6 (most capable)', value: 'opus', default: selected === 'opus' },
-      { label: 'Sonnet 4.6 (fast)', value: 'sonnet', default: selected === 'sonnet' },
-      { label: 'Haiku 4.5 (fastest)', value: 'haiku', default: selected === 'haiku' },
+      ...modelSelectOptions(selected),
     );
 
   const modelRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(modelSelect);
@@ -496,7 +487,7 @@ export async function handleModelSelect(interaction: StringSelectMenuInteraction
 
   const embed = new EmbedBuilder()
     .setTitle('Select Model')
-    .setDescription(`Choose the Claude model and permission mode for this session.\nModel: **${modelLabels[selected] ?? selected}**\nPermissions: **${permLabels[perm] ?? perm}**`)
+    .setDescription(`Choose the Claude model and permission mode for this session.\nModel: **${modelLabel(selected)}**\nPermissions: **${permLabels[perm] ?? perm}**`)
     .setFooter({ text: `${cwdPath} | model:${selected} | perm:${perm}` })
     .setColor(0x5865f2);
 
@@ -531,12 +522,6 @@ export async function handlePermModeSelect(interaction: StringSelectMenuInteract
 
   const { path: cwdPath, model } = parseModelFooter(interaction);
 
-  const modelLabels: Record<string, string> = {
-    opus: 'Opus 4.6 (most capable)',
-    sonnet: 'Sonnet 4.6 (fast)',
-    haiku: 'Haiku 4.5 (fastest)',
-  };
-
   const permLabels: Record<string, string> = {
     default: 'Default',
     acceptEdits: 'Accept Edits',
@@ -548,9 +533,7 @@ export async function handlePermModeSelect(interaction: StringSelectMenuInteract
     .setCustomId('a4d:model:select')
     .setPlaceholder('Select a model...')
     .addOptions(
-      { label: 'Opus 4.6 (most capable)', value: 'opus', default: model === 'opus' },
-      { label: 'Sonnet 4.6 (fast)', value: 'sonnet', default: model === 'sonnet' },
-      { label: 'Haiku 4.5 (fastest)', value: 'haiku', default: model === 'haiku' },
+      ...modelSelectOptions(model),
     );
 
   const modelRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(modelSelect);
@@ -565,7 +548,7 @@ export async function handlePermModeSelect(interaction: StringSelectMenuInteract
 
   const embed = new EmbedBuilder()
     .setTitle('Select Model')
-    .setDescription(`Choose the Claude model and permission mode for this session.\nModel: **${modelLabels[model] ?? model}**\nPermissions: **${permLabels[selected] ?? selected}**`)
+    .setDescription(`Choose the Claude model and permission mode for this session.\nModel: **${modelLabel(model)}**\nPermissions: **${permLabels[selected] ?? selected}**`)
     .setFooter({ text: `${cwdPath} | model:${model} | perm:${selected}` })
     .setColor(0x5865f2);
 

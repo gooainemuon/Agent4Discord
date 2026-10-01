@@ -13,6 +13,7 @@ import { handleSh } from './sh.js';
 import { handleBrowser } from './browser.js';
 import { handlePermission as handlePermissionCmd } from './permission.js';
 import { handleFork } from './fork.js';
+import { MODEL_CHOICES } from '../utils/models.js';
 
 /** Handler function type for slash commands. */
 export type CommandHandler = (interaction: ChatInputCommandInteraction) => Promise<void>;
@@ -35,11 +36,7 @@ const a4dCommand = new SlashCommandBuilder()
         opt.setName('model')
           .setDescription('Model to use')
           .setRequired(true)
-          .addChoices(
-            { name: 'Opus 4.6 (most capable)', value: 'opus' },
-            { name: 'Sonnet 4.6 (fast)', value: 'sonnet' },
-            { name: 'Haiku 4.5 (fastest)', value: 'haiku' },
-          )
+          .addChoices(...MODEL_CHOICES.map((m) => ({ name: m.label, value: m.value })))
       )
   )
   .addSubcommand((sub) =>
