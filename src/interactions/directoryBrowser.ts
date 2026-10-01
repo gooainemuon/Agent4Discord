@@ -112,9 +112,15 @@ export async function buildBrowserMessage(
   const resolvedPath = path.resolve(dirPath);
 
   // Embed -- footer encodes state as "path | pN"
+  // Session Start uses this directory, not whatever the dropdown last showed.
+  const atHome = resolvedPath === path.resolve(HOMEDIR);
   const embed = new EmbedBuilder()
     .setTitle('Select Working Directory')
-    .setDescription(resolvedPath)
+    .setDescription(
+      `📂 **Current folder: \`${displayPath(resolvedPath)}\`**\n` +
+        'Session Start opens a session in this folder. Pick from the list to go into a subfolder.' +
+        (atHome ? '\n⚠️ This is the home directory, not a project folder.' : ''),
+    )
     .setFooter({ text: `${resolvedPath} | p${page}` })
     .setColor(0x5865f2);
 
@@ -127,9 +133,11 @@ export async function buildBrowserMessage(
   }
 
   // Build select menu
+  // A fresh custom id per render: Discord keeps showing the last picked option of a select menu
+  // whose id did not change, which looked like "this folder is selected" after moving into it.
   const selectMenu = new StringSelectMenuBuilder()
-    .setCustomId('a4d:dir:browse')
-    .setPlaceholder('Select a directory...');
+    .setCustomId(`a4d:dir:browse:${Date.now().toString(36)}`)
+    .setPlaceholder('Go into a subfolder...');
 
   if (dirs.length === 0) {
     selectMenu.addOptions({
@@ -159,9 +167,10 @@ export async function buildBrowserMessage(
     .setStyle(ButtonStyle.Secondary)
     .setDisabled(atRoot);
 
+  const folderName = path.basename(resolvedPath) || resolvedPath;
   const startButton = new ButtonBuilder()
     .setCustomId('a4d:dir:start')
-    .setLabel('Session Start')
+    .setLabel(`Session Start · ${atHome ? '~ (home)' : folderName}`.slice(0, 80))
     .setStyle(ButtonStyle.Success);
 
   const resumeButton = new ButtonBuilder()
@@ -902,8 +911,8 @@ export async function handleResumeStart(interaction: ButtonInteraction): Promise
     // Post previous conversation history
     await postSessionHistory(channel as TextChannel, state.selectedSessionId, state.path);
 
-    // Reset directory browser to home
-    const browserMsg = await buildBrowserMessage(HOMEDIR);
+    // Stay in the folder the session was resumed from; jumping back to home hid where the browser was.
+    const browserMsg = await buildBrowserMessage(state.path);
     await interaction.editReply(browserMsg);
 
     // Send followup linking to the new channel

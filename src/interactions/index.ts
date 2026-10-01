@@ -47,11 +47,14 @@ export async function routeInteraction(
 ): Promise<void> {
   const customId = interaction.customId;
 
+  if (customId.startsWith('a4d:dir:browse')) {
+    // The select menu id carries a per-render suffix (see buildBrowserMessage).
+    await handleDirectoryBrowse(interaction as StringSelectMenuInteraction);
+    return;
+  }
+
   if (customId.startsWith('a4d:dir:')) {
     switch (customId) {
-      case 'a4d:dir:browse':
-        await handleDirectoryBrowse(interaction as StringSelectMenuInteraction);
-        return;
       case 'a4d:dir:parent':
         await handleDirectoryParent(interaction as ButtonInteraction);
         return;
