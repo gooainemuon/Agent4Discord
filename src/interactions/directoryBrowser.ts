@@ -21,6 +21,7 @@ import {
 import { listSessions, getSessionMessages, type PermissionMode, type SDKSessionInfo } from '@anthropic-ai/claude-agent-sdk';
 import { isPathSafe, listDirectories } from '../utils/filesystem.js';
 import { DEFAULT_MODEL, modelLabel, modelSelectOptions } from '../utils/models.js';
+import { loadConfig } from '../config.js';
 import { chunkMessage } from '../formatters/chunker.js';
 import { loadGuildConfig } from '../guild.js';
 import { sessionManager } from '../sessions/sessionManager.js';
@@ -355,8 +356,6 @@ export async function handleCreateDirSubmit(interaction: ModalSubmitInteraction)
   }
 }
 
-const MAX_SESSIONS_PER_USER = 3;
-
 /**
  * Handle the "Session Start" button -- show ephemeral model selection message.
  */
@@ -379,9 +378,10 @@ export async function handleSessionStart(interaction: ButtonInteraction): Promis
   const userSessions = sessionManager.getAllSessions().filter(
     (s) => s.userId === interaction.user.id && s.guildId === guild.id,
   );
-  if (userSessions.length >= MAX_SESSIONS_PER_USER) {
+  const maxSessions = loadConfig().maxSessionsPerUser;
+  if (userSessions.length >= maxSessions) {
     await interaction.reply({
-      content: `You already have ${MAX_SESSIONS_PER_USER} active sessions. Stop one before starting a new one.`,
+      content: `You already have ${maxSessions} active sessions. Stop one before starting a new one.`,
       ephemeral: true,
     });
     return;
@@ -580,9 +580,10 @@ export async function handleModelConfirm(interaction: ButtonInteraction): Promis
   const userSessions = sessionManager.getAllSessions().filter(
     (s) => s.userId === interaction.user.id && s.guildId === guild.id,
   );
-  if (userSessions.length >= MAX_SESSIONS_PER_USER) {
+  const maxSessions = loadConfig().maxSessionsPerUser;
+  if (userSessions.length >= maxSessions) {
     await interaction.update({
-      content: `You already have ${MAX_SESSIONS_PER_USER} active sessions. Stop one before starting a new one.`,
+      content: `You already have ${maxSessions} active sessions. Stop one before starting a new one.`,
       embeds: [],
       components: [],
     });
@@ -830,9 +831,10 @@ export async function handleResumeStart(interaction: ButtonInteraction): Promise
   const userSessions = sessionManager.getAllSessions().filter(
     (s) => s.userId === interaction.user.id && s.guildId === guild.id,
   );
-  if (userSessions.length >= MAX_SESSIONS_PER_USER) {
+  const maxSessions = loadConfig().maxSessionsPerUser;
+  if (userSessions.length >= maxSessions) {
     await interaction.reply({
-      content: `You already have ${MAX_SESSIONS_PER_USER} active sessions. Stop one before resuming another.`,
+      content: `You already have ${maxSessions} active sessions. Stop one before resuming another.`,
       ephemeral: true,
     });
     return;

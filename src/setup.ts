@@ -138,6 +138,7 @@ export async function runSetup(): Promise<void> {
     claudeModel: 'opus',
     permissionMode: 'default',
     logLevel: 'info',
+    maxSessionsPerUser: 10,
   };
 
   saveConfig(config);

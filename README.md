@@ -114,9 +114,12 @@ Config is stored at `~/.agent4discord/config.json`:
   "discordClientId": "your-client-id",
   "claudeModel": "opus",
   "permissionMode": "default",
-  "logLevel": "info"
+  "logLevel": "info",
+  "maxSessionsPerUser": 10
 }
 ```
+
+`maxSessionsPerUser` (default 10) caps how many sessions one user can run at once (start, resume and fork). It is re-read on every session start, so no restart is needed.
 
 ## Development
 

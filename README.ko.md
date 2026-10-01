@@ -114,9 +114,12 @@ A4D - Sessions
   "discordClientId": "클라이언트-ID",
   "claudeModel": "opus",
   "permissionMode": "default",
-  "logLevel": "info"
+  "logLevel": "info",
+  "maxSessionsPerUser": 10
 }
 ```
+
+`maxSessionsPerUser`(기본 10)는 한 사용자가 동시에 띄울 수 있는 세션 수입니다(시작·재개·fork 공통). 세션을 시작할 때마다 다시 읽으므로 봇을 재시작하지 않아도 됩니다.
 
 ## 개발
 

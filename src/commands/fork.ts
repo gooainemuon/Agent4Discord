@@ -11,8 +11,7 @@ import { loadGuildConfig } from '../guild.js';
 import { buildStatusEmbed, COLORS } from '../formatters/embedBuilder.js';
 import { createPermissionCallback } from '../interactions/permissionHandler.js';
 import { displayPath } from '../interactions/directoryBrowser.js';
-
-const MAX_SESSIONS_PER_USER = 3;
+import { loadConfig } from '../config.js';
 
 /**
  * Handle `/a4d fork` — fork the current session into a new channel.
@@ -58,9 +57,10 @@ export async function handleFork(
   const userSessions = sessionManager.getAllSessions().filter(
     (s) => s.userId === interaction.user.id && s.guildId === guild.id,
   );
-  if (userSessions.length >= MAX_SESSIONS_PER_USER) {
+  const maxSessions = loadConfig().maxSessionsPerUser;
+  if (userSessions.length >= maxSessions) {
     await interaction.reply({
-      content: `You already have ${MAX_SESSIONS_PER_USER} active sessions. Close one before forking.`,
+      content: `You already have ${maxSessions} active sessions. Close one before forking.`,
       flags: MessageFlags.Ephemeral,
     });
     return;

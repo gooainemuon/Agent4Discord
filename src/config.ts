@@ -10,6 +10,8 @@ export interface AppConfig {
   logLevel: string;
   /** PATCH: Discord user IDs allowed to use the bot. Empty = nobody. */
   ownerIds: string[];
+  /** Active sessions one user may run at once (start, resume, fork). */
+  maxSessionsPerUser: number;
 }
 
 export const CONFIG_DIR: string = path.join(os.homedir(), '.agent4discord');
@@ -19,6 +21,7 @@ const DEFAULTS: Partial<AppConfig> = {
   claudeModel: 'opus',
   permissionMode: 'default',
   logLevel: 'info',
+  maxSessionsPerUser: 10,
 };
 
 export function loadConfig(): AppConfig {
@@ -52,6 +55,9 @@ export function loadConfig(): AppConfig {
     permissionMode: (typeof obj['permissionMode'] === 'string' ? obj['permissionMode'] : DEFAULTS.permissionMode) as string,
     logLevel: (typeof obj['logLevel'] === 'string' ? obj['logLevel'] : DEFAULTS.logLevel) as string,
     ownerIds: Array.isArray(obj['ownerIds']) ? (obj['ownerIds'] as unknown[]).filter((x): x is string => typeof x === 'string') : [],
+    maxSessionsPerUser: Number.isInteger(obj['maxSessionsPerUser']) && (obj['maxSessionsPerUser'] as number) > 0
+      ? (obj['maxSessionsPerUser'] as number)
+      : (DEFAULTS.maxSessionsPerUser as number),
   };
 }
 
