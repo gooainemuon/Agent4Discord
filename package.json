@@ -1,6 +1,6 @@
 {
   "name": "agent4discord",
-  "version": "0.3.0",
+  "version": "0.4.0",
   "description": "Remote Claude Code sessions through Discord",
   "type": "module",
   "bin": {
