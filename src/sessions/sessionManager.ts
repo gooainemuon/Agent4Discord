@@ -348,12 +348,23 @@ class SessionManager extends EventEmitter {
         }
       }
     } catch (err) {
+      if (session.state === 'stopped' || session.state === 'archived') return; // closed on purpose
       console.error(
         `[session] Event processing error for channel ${session.channelId}:`,
         err,
       );
       session.state = 'stopped';
+      this.emit('stopped', session.channelId);
       this.emit('error', session.channelId, err);
+      return;
+    }
+    // The stream ended without stopSession(): the Claude process exited on its own. Say so, or the
+    // channel looks alive while messages go nowhere.
+    if (session.state !== 'stopped' && session.state !== 'archived') {
+      console.warn(`[session] Session for channel ${session.channelId} ended unexpectedly`);
+      session.state = 'stopped';
+      this.emit('stopped', session.channelId);
+      this.emit('ended', session.channelId);
     }
   }
 }

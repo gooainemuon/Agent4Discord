@@ -1,4 +1,4 @@
-import { ChannelType, ThreadAutoArchiveDuration } from 'discord.js';
+import { ChannelType, EmbedBuilder, ThreadAutoArchiveDuration } from 'discord.js';
 import type { Client, TextChannel, ThreadChannel } from 'discord.js';
 import type { SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { sessionManager } from './sessionManager.js';
@@ -472,6 +472,24 @@ export function setupEventHandlers(client: Client): void {
     }
   });
 
+  sessionManager.on('ended', async (channelId: string) => {
+    stopTyping(channelId);
+    await finalizeStreamsForChannel(channelId);
+    const toolHandler = activeToolProgress.get(channelId);
+    if (toolHandler) {
+      await toolHandler.finalize();
+      activeToolProgress.delete(channelId);
+    }
+
+    const channel = client.channels.cache.get(channelId);
+    if (!channel?.isTextBased()) return;
+    const textChannel = channel as TextChannel;
+    await markStatusStopped(textChannel);
+    await textChannel
+      .send('⚠️ 세션이 끝났습니다(Claude 프로세스 종료). `/a4d resume` 으로 다시 시작하세요.')
+      .catch(() => {});
+  });
+
   sessionManager.on('error', async (channelId: string, _err: unknown) => {
     stopTyping(channelId);
 
@@ -486,6 +504,22 @@ export function setupEventHandlers(client: Client): void {
     const channel = client.channels.cache.get(channelId);
     if (!channel?.isTextBased()) return;
     const textChannel = channel as TextChannel;
-    await textChannel.send('An error occurred in this session. The session may have stopped.');
+    await markStatusStopped(textChannel);
+    await textChannel.send('An error occurred in this session. The session may have stopped. Use `/a4d resume` to restart it.');
   });
+
+  /** Turn the pinned status embed red so a dead session does not look active. */
+  async function markStatusStopped(textChannel: TextChannel): Promise<void> {
+    try {
+      const pinned = await textChannel.messages.fetchPins();
+      const statusMsg = pinned.items.find(
+        (p) => p.message.author.id === client.user?.id && p.message.embeds.length > 0,
+      )?.message;
+      if (!statusMsg) return;
+      const updated = EmbedBuilder.from(statusMsg.embeds[0]).setTitle('Session Stopped').setColor(COLORS.STOPPED);
+      await statusMsg.edit({ embeds: [updated] });
+    } catch {
+      // best-effort
+    }
+  }
 }
