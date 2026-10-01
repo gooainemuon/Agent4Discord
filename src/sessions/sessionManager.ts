@@ -1,5 +1,6 @@
 // Session lifecycle -- AGE-016
 import fs from 'node:fs';
+import os from 'node:os';
 import nodePath from 'node:path';
 import { EventEmitter } from 'node:events';
 import {
@@ -18,6 +19,7 @@ import { AttachmentBuilder, GuildPremiumTier, type Client, type TextChannel } fr
 import { resolvePlugins } from '../utils/plugins.js';
 import { createDiscordToolServer, getUploadLimit } from '../tools/discordTools.js';
 import { sessionContextOptions } from './sessionContext.js';
+import { attachRefusal } from '../utils/attachPolicy.js';
 
 export type SessionState = 'idle' | 'running' | 'stopped' | 'archived';
 
@@ -73,7 +75,7 @@ class SessionManager extends EventEmitter {
 
     if (client) {
       mcpServers.discord = createDiscordToolServer(
-        this._buildSendFile(client, channelId, guildId),
+        this._buildSendFile(client, channelId, guildId, cwd),
       );
       allowedTools.push('mcp__discord__attach_file');
     }
@@ -163,7 +165,7 @@ class SessionManager extends EventEmitter {
 
     if (client) {
       mcpServers.discord = createDiscordToolServer(
-        this._buildSendFile(client, channelId, guildId),
+        this._buildSendFile(client, channelId, guildId, cwd),
       );
       allowedTools.push('mcp__discord__attach_file');
     }
@@ -271,8 +273,16 @@ class SessionManager extends EventEmitter {
     return [...this.sessions.values()];
   }
 
-  private _buildSendFile(client: Client, channelId: string, guildId: string) {
-    return async (filePath: string, filename?: string): Promise<string> => {
+  private _buildSendFile(client: Client, channelId: string, guildId: string, cwd: string) {
+    return async (requestedPath: string, filename?: string): Promise<string> => {
+      // Resolve symlinks first, then check where the file really is (see utils/attachPolicy.ts).
+      const filePath = await fs.promises.realpath(requestedPath);
+      const roots = await Promise.all(
+        [cwd, os.tmpdir(), '/tmp'].map((p) => fs.promises.realpath(p).catch(() => nodePath.resolve(p))),
+      );
+      const refusal = attachRefusal(filePath, roots);
+      if (refusal) throw new Error(refusal);
+
       // Validate file exists
       const stats = await fs.promises.stat(filePath);
 
