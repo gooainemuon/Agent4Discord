@@ -356,6 +356,13 @@ export async function handleCreateDirSubmit(interaction: ModalSubmitInteraction)
   }
 }
 
+/** Warning line for the model picker when the session would run in the home directory. */
+function homeWarning(cwd: string): string {
+  return path.resolve(cwd) === path.resolve(os.homedir())
+    ? '\n\n⚠️ **Home directory.** This is not a project folder: no project CLAUDE.md, inbox or permissions apply. Go into the project folder first unless you mean it.'
+    : '';
+}
+
 /**
  * Handle the "Session Start" button -- show ephemeral model selection message.
  */
@@ -416,7 +423,7 @@ export async function handleSessionStart(interaction: ButtonInteraction): Promis
 
   const embed = new EmbedBuilder()
     .setTitle('Select Model')
-    .setDescription('Choose the Claude model and permission mode for this session.')
+    .setDescription('Choose the Claude model and permission mode for this session.' + homeWarning(state.path))
     .setFooter({ text: `${state.path} | model:opus | perm:default` })
     .setColor(0x5865f2);
 
@@ -487,7 +494,7 @@ export async function handleModelSelect(interaction: StringSelectMenuInteraction
 
   const embed = new EmbedBuilder()
     .setTitle('Select Model')
-    .setDescription(`Choose the Claude model and permission mode for this session.\nModel: **${modelLabel(selected)}**\nPermissions: **${permLabels[perm] ?? perm}**`)
+    .setDescription(`Choose the Claude model and permission mode for this session.\nModel: **${modelLabel(selected)}**\nPermissions: **${permLabels[perm] ?? perm}**` + homeWarning(cwdPath))
     .setFooter({ text: `${cwdPath} | model:${selected} | perm:${perm}` })
     .setColor(0x5865f2);
 
@@ -548,7 +555,7 @@ export async function handlePermModeSelect(interaction: StringSelectMenuInteract
 
   const embed = new EmbedBuilder()
     .setTitle('Select Model')
-    .setDescription(`Choose the Claude model and permission mode for this session.\nModel: **${modelLabel(model)}**\nPermissions: **${permLabels[selected] ?? selected}**`)
+    .setDescription(`Choose the Claude model and permission mode for this session.\nModel: **${modelLabel(model)}**\nPermissions: **${permLabels[selected] ?? selected}**` + homeWarning(cwdPath))
     .setFooter({ text: `${cwdPath} | model:${model} | perm:${selected}` })
     .setColor(0x5865f2);
 
@@ -827,13 +834,6 @@ export async function handleResumeStart(interaction: ButtonInteraction): Promise
     return;
   }
 
-  // Enforce concurrent session limit
-  const userSessions = sessionManager.getAllSessions().filter(
-    (s) => s.userId === interaction.user.id && s.guildId === guild.id,
-  );
-  const maxSessions = loadConfig().maxSessionsPerUser;
-  if (userSessions.length >= maxSessions) {
-    await interaction.reply({
   // One Claude session per channel: resuming it again would put two channels on one transcript.
   const holder = sessionManager.findActiveBySessionId(state.selectedSessionId);
   if (holder) {
@@ -844,6 +844,13 @@ export async function handleResumeStart(interaction: ButtonInteraction): Promise
     return;
   }
 
+  // Enforce concurrent session limit
+  const userSessions = sessionManager.getAllSessions().filter(
+    (s) => s.userId === interaction.user.id && s.guildId === guild.id,
+  );
+  const maxSessions = loadConfig().maxSessionsPerUser;
+  if (userSessions.length >= maxSessions) {
+    await interaction.reply({
       content: `You already have ${maxSessions} active sessions. Stop one before resuming another.`,
       ephemeral: true,
     });
