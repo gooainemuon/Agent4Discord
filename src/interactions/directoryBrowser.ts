@@ -414,11 +414,8 @@ export async function handleSessionStart(interaction: ButtonInteraction): Promis
   }
 
   // Enforce concurrent session limit
-  const userSessions = sessionManager.getAllSessions().filter(
-    (s) => s.userId === interaction.user.id && s.guildId === guild.id && s.state !== 'stopped' && s.state !== 'archived',
-  );
   const maxSessions = loadConfig().maxSessionsPerUser;
-  if (userSessions.length >= maxSessions) {
+  if (sessionManager.liveSessionCount(interaction.user.id, guild.id) >= maxSessions) {
     await interaction.reply({
       content: `You already have ${maxSessions} active sessions. Stop one before starting a new one.`,
       ephemeral: true,
@@ -588,11 +585,8 @@ export async function handleModelConfirm(interaction: ButtonInteraction): Promis
   }
 
   // Re-check concurrent session limit
-  const userSessions = sessionManager.getAllSessions().filter(
-    (s) => s.userId === interaction.user.id && s.guildId === guild.id && s.state !== 'stopped' && s.state !== 'archived',
-  );
   const maxSessions = loadConfig().maxSessionsPerUser;
-  if (userSessions.length >= maxSessions) {
+  if (sessionManager.liveSessionCount(interaction.user.id, guild.id) >= maxSessions) {
     await interaction.update({
       content: `You already have ${maxSessions} active sessions. Stop one before starting a new one.`,
       embeds: [],
@@ -851,11 +845,8 @@ export async function handleResumeStart(interaction: ButtonInteraction): Promise
   }
 
   // Enforce concurrent session limit
-  const userSessions = sessionManager.getAllSessions().filter(
-    (s) => s.userId === interaction.user.id && s.guildId === guild.id && s.state !== 'stopped' && s.state !== 'archived',
-  );
   const maxSessions = loadConfig().maxSessionsPerUser;
-  if (userSessions.length >= maxSessions) {
+  if (sessionManager.liveSessionCount(interaction.user.id, guild.id) >= maxSessions) {
     await interaction.reply({
       content: `You already have ${maxSessions} active sessions. Stop one before resuming another.`,
       ephemeral: true,

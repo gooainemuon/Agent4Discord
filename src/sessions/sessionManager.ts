@@ -55,88 +55,7 @@ class SessionManager extends EventEmitter {
     permissionMode?: PermissionMode,
     effort?: EffortLevel,
   ): ActiveSession {
-    const controller = new AbortController();
-
-    this._closeLiveSession(channelId);
-
-    let resolveNext: ((msg: SDKUserMessage) => void) | null = null;
-    // Messages sent before the SDK asks for the next one (e.g. right after start or resume) wait here.
-    const pending: SDKUserMessage[] = [];
-
-    async function* messageStream(): AsyncGenerator<SDKUserMessage> {
-      while (true) {
-        const msg =
-          pending.shift() ??
-          (await new Promise<SDKUserMessage>((resolve) => {
-            resolveNext = resolve;
-          }));
-        yield msg;
-      }
-    }
-
-    const plugins = resolvePlugins();
-
-    // Build MCP servers (discord tool for file attachment)
-    const mcpServers: Record<string, ReturnType<typeof createDiscordToolServer>> = {};
-    const allowedTools: string[] = [];
-
-    if (client) {
-      mcpServers.discord = createDiscordToolServer(
-        this._buildSendFile(client, channelId, guildId),
-      );
-      allowedTools.push('mcp__discord__attach_file');
-    }
-
-    const q = query({
-      prompt: messageStream(),
-      options: {
-        cwd,
-        ...sessionContextOptions(cwd),
-        model: model || 'opus',
-        permissionMode: permissionMode === 'plan' ? 'plan' : 'default',
-        includePartialMessages: true,
-        abortController: controller,
-        ...(effort && { effort }),
-        canUseTool,
-        plugins,
-        ...(Object.keys(mcpServers).length > 0 && { mcpServers }),
-        ...(allowedTools.length > 0 && { allowedTools }),
-      },
-    });
-
-    const session: ActiveSession = {
-      query: q,
-      channelId,
-      guildId,
-      userId,
-      sessionId: '',
-      cwd,
-      state: 'running',
-      permissionMode: permissionMode ?? 'default',
-      effort,
-      totalCostUsd: 0,
-      createdAt: new Date().toISOString(),
-      resolveNext: null,
-      pendingMessages: pending,
-      abortController: controller,
-    };
-
-    // Wire up resolveNext -- the generator captures the outer variable,
-    // but ActiveSession needs its own reference so sendMessage can call it.
-    // Because the generator closure mutates the local `resolveNext`, we
-    // need a proxy that always reads the latest value.
-    Object.defineProperty(session, 'resolveNext', {
-      get: () => resolveNext,
-      set: (v: ((msg: SDKUserMessage) => void) | null) => {
-        resolveNext = v;
-      },
-      enumerable: true,
-      configurable: true,
-    });
-
-    this.sessions.set(channelId, session);
-    void this._processEvents(session);
-    return session;
+    return this._startSession({ guildId, userId, channelId, cwd, model, canUseTool, client, permissionMode, effort });
   }
 
   resumeSession(
@@ -152,6 +71,26 @@ class SessionManager extends EventEmitter {
     forkSession = false,
     effort?: EffortLevel,
   ): ActiveSession {
+    return this._startSession({
+      guildId, userId, channelId, cwd, model, canUseTool, client, permissionMode, effort,
+      resume: { sessionId, forkSession },
+    });
+  }
+
+  /** Shared by createSession and resumeSession: one query per channel, fed by a message queue. */
+  private _startSession(opts: {
+    guildId: string;
+    userId: string;
+    channelId: string;
+    cwd: string;
+    model?: string;
+    canUseTool?: CanUseTool;
+    client?: Client;
+    permissionMode?: PermissionMode;
+    effort?: EffortLevel;
+    resume?: { sessionId: string; forkSession: boolean };
+  }): ActiveSession {
+    const { guildId, userId, channelId, cwd, model, canUseTool, client, permissionMode, effort, resume } = opts;
     const controller = new AbortController();
 
     this._closeLiveSession(channelId);
@@ -193,10 +132,10 @@ class SessionManager extends EventEmitter {
         permissionMode: permissionMode === 'plan' ? 'plan' : 'default',
         includePartialMessages: true,
         abortController: controller,
-        resume: sessionId,
-        // Without this, resume continues the same session file: two channels on one session
+        ...(resume && { resume: resume.sessionId }),
+        // Without forkSession, resume continues the same session file: two channels on one session
         // write into one transcript and each sees the other's messages.
-        ...(forkSession && { forkSession: true }),
+        ...(resume?.forkSession && { forkSession: true }),
         ...(effort && { effort }),
         canUseTool,
         plugins,
@@ -210,7 +149,8 @@ class SessionManager extends EventEmitter {
       channelId,
       guildId,
       userId,
-      sessionId: forkSession ? '' : sessionId, // a fork gets its own id from the init message
+      // New sessions and forks get their id from the init message; a plain resume keeps its id.
+      sessionId: resume && !resume.forkSession ? resume.sessionId : '',
       cwd,
       state: 'running',
       permissionMode: permissionMode ?? 'default',
@@ -222,6 +162,10 @@ class SessionManager extends EventEmitter {
       abortController: controller,
     };
 
+    // Wire up resolveNext -- the generator captures the outer variable,
+    // but ActiveSession needs its own reference so sendMessage can call it.
+    // Because the generator closure mutates the local `resolveNext`, we
+    // need a proxy that always reads the latest value.
     Object.defineProperty(session, 'resolveNext', {
       get: () => resolveNext,
       set: (v: ((msg: SDKUserMessage) => void) | null) => {
@@ -313,6 +257,15 @@ class SessionManager extends EventEmitter {
       if (s.sessionId === sessionId && s.state !== 'stopped' && s.state !== 'archived') return s;
     }
     return null;
+  }
+
+  /** Sessions of a user in a guild that are still running (the per-user limit counts these). */
+  liveSessionCount(userId: string, guildId: string): number {
+    let n = 0;
+    for (const s of this.sessions.values()) {
+      if (s.userId === userId && s.guildId === guildId && s.state !== 'stopped' && s.state !== 'archived') n++;
+    }
+    return n;
   }
 
   getAllSessions(): ActiveSession[] {

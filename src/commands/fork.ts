@@ -54,11 +54,8 @@ export async function handleFork(
   }
 
   // Enforce concurrent session limit
-  const userSessions = sessionManager.getAllSessions().filter(
-    (s) => s.userId === interaction.user.id && s.guildId === guild.id && s.state !== 'stopped' && s.state !== 'archived',
-  );
   const maxSessions = loadConfig().maxSessionsPerUser;
-  if (userSessions.length >= maxSessions) {
+  if (sessionManager.liveSessionCount(interaction.user.id, guild.id) >= maxSessions) {
     await interaction.reply({
       content: `You already have ${maxSessions} active sessions. Close one before forking.`,
       flags: MessageFlags.Ephemeral,
