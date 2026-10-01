@@ -2,10 +2,9 @@ import {
   EmbedBuilder,
   MessageFlags,
   type ChatInputCommandInteraction,
-  type TextChannel,
 } from 'discord.js';
 import { sessionManager } from '../sessions/sessionManager.js';
-import { loadGuildConfig } from '../guild.js';
+import { requireSessionChannel } from './sessionChannel.js';
 import { COLORS } from '../formatters/embedBuilder.js';
 import { startTyping } from '../sessions/eventHandler.js';
 
@@ -13,32 +12,9 @@ import { startTyping } from '../sessions/eventHandler.js';
  * Handle `/a4d skill [command]` -- list or execute Claude Code slash commands.
  */
 export async function handleSkill(interaction: ChatInputCommandInteraction): Promise<void> {
-  const guild = interaction.guild;
-  if (!guild) {
-    await interaction.reply({ content: 'This command can only be used in a server.', flags: MessageFlags.Ephemeral });
-    return;
-  }
-
-  const guildConfig = loadGuildConfig(guild.id);
-  if (!guildConfig) {
-    await interaction.reply({ content: 'A4D is not set up. Run `/a4d init` first.', flags: MessageFlags.Ephemeral });
-    return;
-  }
-
-  const channel = interaction.channel as TextChannel;
-  if (channel.parentId !== guildConfig.sessionsCategoryId) {
-    await interaction.reply({
-      content: 'This command can only be used in a session channel under "A4D - Sessions".',
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
-  const session = sessionManager.getSession(channel.id);
-  if (!session) {
-    await interaction.reply({ content: 'No active session in this channel.', flags: MessageFlags.Ephemeral });
-    return;
-  }
+  const ctx = await requireSessionChannel(interaction);
+  if (!ctx) return;
+  const { channel, session } = ctx;
 
   const command = interaction.options.getString('command');
 
