@@ -2,6 +2,7 @@ import { ChannelType, ThreadAutoArchiveDuration } from 'discord.js';
 import type { Client, TextChannel, ThreadChannel } from 'discord.js';
 import type { SDKAssistantMessage, SDKResultMessage, SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { sessionManager } from './sessionManager.js';
+import { updateSessionIdInGuild } from './sessionStore.js';
 import { chunkMessage } from '../formatters/chunker.js';
 import { buildStatusEmbed, COLORS } from '../formatters/embedBuilder.js';
 import { StreamHandler } from './streamHandler.js';
@@ -337,6 +338,15 @@ export function setupEventHandlers(client: Client): void {
   });
 
   // --- Result events ---
+  // Persist the real session id so /a4d resume after a restart finds this channel's own session.
+  sessionManager.on('session_id', (channelId: string, guildId: string, sessionId: string) => {
+    try {
+      updateSessionIdInGuild(guildId, channelId, sessionId);
+    } catch (err) {
+      console.error('[session] Failed to persist session id:', err);
+    }
+  });
+
   sessionManager.on('result', async (channelId: string, msg: SDKResultMessage) => {
     stopTyping(channelId);
 

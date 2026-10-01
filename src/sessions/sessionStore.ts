@@ -27,6 +27,15 @@ export function saveSessionToGuild(
   saveGuildConfig(config);
 }
 
+/** Record the real session id once the SDK reports it (new sessions and forks start without one). */
+export function updateSessionIdInGuild(guildId: string, channelId: string, sessionId: string): void {
+  const config = loadGuildConfig(guildId);
+  const entry = config?.activeSessions[channelId];
+  if (!config || !entry || entry.sessionId === sessionId) return;
+  entry.sessionId = sessionId;
+  saveGuildConfig(config);
+}
+
 export function removeSessionFromGuild(
   guildId: string,
   channelId: string,

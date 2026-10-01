@@ -76,7 +76,8 @@ export async function handleFork(
       parent: guildConfig.sessionsCategoryId,
     });
 
-    // Resume with the same sessionId — SDK creates a fork point
+    // forkSession gives the fork its own session id and transcript; plain resume would make both
+    // channels write into one session.
     const forkedSession = sessionManager.resumeSession(
       guild.id,
       interaction.user.id,
@@ -87,16 +88,18 @@ export async function handleFork(
       createPermissionCallback(forkChannel as TextChannel, interaction.user.id),
       interaction.client,
       session.permissionMode,
+      true, // forkSession
     );
 
-    saveSessionToGuild(guild.id, forkChannel.id, session.sessionId, session.cwd, interaction.user.id);
+    // The fork's own id arrives with its init message and is persisted then.
+    saveSessionToGuild(guild.id, forkChannel.id, '', session.cwd, interaction.user.id);
 
     const statusEmbed = buildStatusEmbed({
       status: 'Session Active (Fork)',
       color: COLORS.IDLE,
       cwd: displayPath(session.cwd),
       model: 'opus',
-      sessionId: forkedSession.sessionId || session.sessionId,
+      sessionId: forkedSession.sessionId || 'pending', // filled in when the fork's first turn ends
       costUsd: 0,
       startedAt: new Date().toISOString(),
       permissionMode: session.permissionMode,

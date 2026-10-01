@@ -834,6 +834,16 @@ export async function handleResumeStart(interaction: ButtonInteraction): Promise
   const maxSessions = loadConfig().maxSessionsPerUser;
   if (userSessions.length >= maxSessions) {
     await interaction.reply({
+  // One Claude session per channel: resuming it again would put two channels on one transcript.
+  const holder = sessionManager.findActiveBySessionId(state.selectedSessionId);
+  if (holder) {
+    await interaction.reply({
+      content: `That session is already open in <#${holder.channelId}>. Use that channel, or \`/a4d fork\` there to branch it.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
       content: `You already have ${maxSessions} active sessions. Stop one before resuming another.`,
       ephemeral: true,
     });

@@ -5,9 +5,8 @@ import {
   type ChatInputCommandInteraction,
   type TextChannel,
 } from 'discord.js';
-import { listSessions } from '@anthropic-ai/claude-agent-sdk';
 import { sessionManager } from '../sessions/sessionManager.js';
-import { saveSessionToGuild } from '../sessions/sessionStore.js';
+import { getSessionsForGuild, saveSessionToGuild } from '../sessions/sessionStore.js';
 import { loadGuildConfig } from '../guild.js';
 import { buildStatusEmbed, COLORS } from '../formatters/embedBuilder.js';
 import { createPermissionCallback } from '../interactions/permissionHandler.js';
@@ -86,20 +85,24 @@ export async function handleResume(interaction: ChatInputCommandInteraction): Pr
     ? path.join(os.homedir(), rawCwd.slice(1))
     : rawCwd;
 
-  // If sessionId is missing or pending, find the most recent session for this directory
+  // If the embed never got the real id, use the one stored for this channel. Never fall back to
+  // "the newest session in this directory": with several channels in one directory, they would all
+  // attach to the same session and share one transcript.
   if (!sessionId || sessionId === 'pending') {
-    try {
-      const sessions = await listSessions({ dir: cwd, limit: 1 });
-      if (sessions.length > 0) {
-        sessionId = sessions[0].sessionId;
-      }
-    } catch {
-      // listSessions may not be available
-    }
+    sessionId = getSessionsForGuild(guild.id)[channel.id]?.sessionId || undefined;
   }
 
   if (!sessionId || sessionId === 'pending') {
-    await interaction.reply({ content: 'No session found for this directory. Try starting a new session instead.', flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: 'No session id recorded for this channel. Start a new session instead.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const holder = sessionManager.findActiveBySessionId(sessionId, channel.id);
+  if (holder) {
+    await interaction.reply({
+      content: `This session is already open in <#${holder.channelId}>. Close it there first, or use \`/a4d fork\` there to branch it.`,
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 

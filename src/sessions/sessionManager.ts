@@ -133,6 +133,7 @@ class SessionManager extends EventEmitter {
     canUseTool?: CanUseTool,
     client?: Client,
     permissionMode?: PermissionMode,
+    forkSession = false,
   ): ActiveSession {
     const controller = new AbortController();
 
@@ -170,6 +171,9 @@ class SessionManager extends EventEmitter {
         includePartialMessages: true,
         abortController: controller,
         resume: sessionId,
+        // Without this, resume continues the same session file: two channels on one session
+        // write into one transcript and each sees the other's messages.
+        ...(forkSession && { forkSession: true }),
         canUseTool,
         plugins,
         ...(Object.keys(mcpServers).length > 0 && { mcpServers }),
@@ -182,7 +186,7 @@ class SessionManager extends EventEmitter {
       channelId,
       guildId,
       userId,
-      sessionId,
+      sessionId: forkSession ? '' : sessionId, // a fork gets its own id from the init message
       cwd,
       state: 'running',
       permissionMode: permissionMode ?? 'default',
@@ -244,6 +248,15 @@ class SessionManager extends EventEmitter {
     this.sessions.delete(channelId);
   }
 
+  /** The running session in another channel that already uses this Claude session id, if any. */
+  findActiveBySessionId(sessionId: string, exceptChannelId?: string): ActiveSession | null {
+    for (const s of this.sessions.values()) {
+      if (s.channelId === exceptChannelId) continue;
+      if (s.sessionId === sessionId && s.state !== 'stopped' && s.state !== 'archived') return s;
+    }
+    return null;
+  }
+
   getAllSessions(): ActiveSession[] {
     return [...this.sessions.values()];
   }
@@ -290,8 +303,9 @@ class SessionManager extends EventEmitter {
         switch (msg.type) {
           case 'system': {
             const sysMsg = msg as SDKSystemMessage;
-            if (sysMsg.subtype === 'init' && sysMsg.session_id) {
+            if (sysMsg.subtype === 'init' && sysMsg.session_id && sysMsg.session_id !== session.sessionId) {
               session.sessionId = sysMsg.session_id;
+              this.emit('session_id', session.channelId, session.guildId, session.sessionId);
             }
             if ((sysMsg as any).subtype === 'local_command_output') {
               this.emit('local_command_output', session.channelId, (sysMsg as any).content);
