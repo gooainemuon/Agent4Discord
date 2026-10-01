@@ -1,7 +1,20 @@
 node_modules/
 dist/
-~/.agent4discord/
 *.tsbuildinfo
-.env
 __pycache__/
 *.pyc
+
+# Secrets and machine-local settings. The bot token lives in ~/.agent4discord/config.json,
+# outside the repo; these catch copies or local overrides that end up in the tree.
+.agent4discord/
+config.local.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.pfx
+.npmrc
+.claude/settings.local.json
+*.log
