@@ -79,7 +79,8 @@ describe('buildModelPicker', () => {
       custom_id: string;
       options?: { value: string; default?: boolean }[];
     }[][];
-    expect(rows.map((r) => r[0].custom_id)).toEqual([
+    const { splitStateKey } = await import('./browserState.js');
+    expect(rows.map((r) => splitStateKey(r[0].custom_id).base)).toEqual([
       'a4d:model:select',
       'a4d:perm-mode:select',
       'a4d:effort-mode:select',
@@ -90,3 +91,29 @@ describe('buildModelPicker', () => {
     expect(picker.embeds[0].toJSON().footer?.text).toBe(`${project} | model:fable | perm:acceptEdits | effort:xhigh`);
   });
 });
+
+describe('handlers with the embed hidden (no footer to read)', () => {
+  it('model picker keeps folder and picks from the component key alone', async () => {
+    const { buildModelPicker, handleModelSelect } = await import('./directoryBrowser.js');
+    const picker = buildModelPicker({ path: project, model: 'opus', perm: 'plan', effort: 'high' });
+    const effortId = (picker.components[2].toJSON().components[0] as { custom_id: string }).custom_id;
+    const update = vi.fn(async (_m: unknown) => undefined);
+    const interaction = { customId: effortId.replace('a4d:effort-mode', 'a4d:model'), values: ['fable'], message: { embeds: [] }, update };
+    await handleModelSelect(interaction as never);
+    const next = update.mock.calls[0][0] as ReturnType<typeof buildModelPicker>;
+    expect(next.embeds[0].toJSON().footer?.text).toBe(`${project} | model:fable | perm:plan | effort:high`);
+  });
+
+  it('directory browser Parent goes up from the folder in the key, not from home', async () => {
+    const { buildBrowserMessage, handleDirectoryParent } = await import('./directoryBrowser.js');
+    const { splitStateKey } = await import('./browserState.js');
+    const msg = await buildBrowserMessage(project);
+    const parentId = (msg.components[1].toJSON().components as { custom_id: string }[])
+      .find((c) => splitStateKey(c.custom_id).base === 'a4d:dir:parent')!.custom_id;
+    const update = vi.fn(async (_m: unknown) => undefined);
+    await handleDirectoryParent({ customId: parentId, message: { embeds: [] }, update } as never);
+    const next = update.mock.calls[0][0] as Awaited<ReturnType<typeof buildBrowserMessage>>;
+    expect(next.embeds[0].toJSON().footer?.text).toBe(`${nodePath.dirname(project)} | p0`);
+  });
+});
+

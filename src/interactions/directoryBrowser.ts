@@ -22,7 +22,7 @@ import { listSessions, getSessionMessages, type EffortLevel, type PermissionMode
 import { EFFORT_LEVELS } from '../commands/effort.js';
 import { isPathSafe, listDirectories } from '../utils/filesystem.js';
 import { DEFAULT_MODEL, modelLabel, modelSelectOptions } from '../utils/models.js';
-import { loadBrowserState, saveBrowserState, splitStateKey, withStateKey } from './browserState.js';
+import { loadBrowserState, loadComponentState, saveBrowserState, saveComponentState, splitStateKey, withStateKey } from './browserState.js';
 import { loadConfig } from '../config.js';
 import { chunkMessage } from '../formatters/chunker.js';
 import { loadGuildConfig } from '../guild.js';
@@ -443,6 +443,8 @@ interface PickerState {
   perm: PermissionMode;
   /** 'default' = whatever settings.json gives; otherwise an EffortLevel. */
   effort: string;
+  /** Neither a state key nor a footer was found; `path` is only the home fallback. */
+  unknown?: boolean;
 }
 
 const EFFORT_CHOICES: { value: string; label: string }[] = [
@@ -451,7 +453,12 @@ const EFFORT_CHOICES: { value: string; label: string }[] = [
 ];
 
 function parseModelFooter(interaction: ButtonInteraction | StringSelectMenuInteraction): PickerState {
+  // 1) state key on the clicked component; 2) legacy footer (pickers rendered before the key existed)
+  const stored = loadComponentState<PickerState>(splitStateKey(interaction.customId).key);
+  if (stored) return stored;
+
   const text = interaction.message.embeds[0]?.footer?.text ?? '';
+  if (!text) return { path: HOMEDIR, model: DEFAULT_MODEL, perm: 'default', effort: 'default', unknown: true };
   const parts = text.split(' | ');
   const pathValue = parts[0] || os.homedir();
   let model = DEFAULT_MODEL;
@@ -479,9 +486,9 @@ const PERM_LABELS: Record<string, string> = {
   plan: 'Plan Mode',
 };
 
-function buildPermSelectMenu(selectedPerm: string): StringSelectMenuBuilder {
+function buildPermSelectMenu(selectedPerm: string, id: (base: string) => string): StringSelectMenuBuilder {
   return new StringSelectMenuBuilder()
-    .setCustomId('a4d:perm-mode:select')
+    .setCustomId(id('a4d:perm-mode:select'))
     .setPlaceholder('Permission mode...')
     .addOptions(
       { label: 'Default (ask for everything)', value: 'default', default: selectedPerm === 'default' },
@@ -496,21 +503,26 @@ export function buildModelPicker(st: PickerState): {
   embeds: EmbedBuilder[];
   components: ActionRowBuilder<MessageActionRowComponentBuilder>[];
 } {
+  // The folder and picks travel on every component id, like the directory browser (see browserState.ts).
+  const { unknown: _unknown, ...picks } = st;
+  const key = saveComponentState(picks);
+  const id = (base: string) => withStateKey(base, key);
+
   const modelSelect = new StringSelectMenuBuilder()
-    .setCustomId('a4d:model:select')
+    .setCustomId(id('a4d:model:select'))
     .setPlaceholder('Select a model...')
     .addOptions(...modelSelectOptions(st.model));
 
   const effortSelect = new StringSelectMenuBuilder()
-    .setCustomId('a4d:effort-mode:select')
+    .setCustomId(id('a4d:effort-mode:select'))
     .setPlaceholder('Effort...')
     .addOptions(...EFFORT_CHOICES.map((c) => ({ ...c, default: c.value === st.effort })));
 
   const row = (c: StringSelectMenuBuilder | ButtonBuilder) =>
     new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(c);
   const buttonRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-    new ButtonBuilder().setCustomId('a4d:model:confirm').setLabel('Start Session').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('a4d:model:cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(id('a4d:model:confirm')).setLabel('Start Session').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(id('a4d:model:cancel')).setLabel('Cancel').setStyle(ButtonStyle.Secondary),
   );
 
   const effortText = st.effort === 'default' ? 'default (from settings.json)' : st.effort;
@@ -524,7 +536,7 @@ export function buildModelPicker(st: PickerState): {
     .setFooter({ text: `${st.path} | model:${st.model} | perm:${st.perm} | effort:${st.effort}` })
     .setColor(0x5865f2);
 
-  return { embeds: [embed], components: [row(modelSelect), row(buildPermSelectMenu(st.perm)), row(effortSelect), buttonRow] };
+  return { embeds: [embed], components: [row(modelSelect), row(buildPermSelectMenu(st.perm, id)), row(effortSelect), buttonRow] };
 }
 
 // ---------------------------------------------------------------------------
@@ -556,8 +568,13 @@ export async function handleEffortModeSelect(interaction: StringSelectMenuIntera
  * Handle model confirm button -- create session channel and start a Claude Code session.
  */
 export async function handleModelConfirm(interaction: ButtonInteraction): Promise<void> {
-  const { path: cwdPath, model, perm: permissionMode, effort } = parseModelFooter(interaction);
+  const { path: cwdPath, model, perm: permissionMode, effort, unknown } = parseModelFooter(interaction);
   const guild = interaction.guild;
+
+  if (unknown) {
+    await interaction.reply({ content: 'This picker lost track of its folder. Press Session Start again.', ephemeral: true });
+    return;
+  }
 
   if (!guild) {
     await interaction.reply({ content: 'This can only be used in a server.', ephemeral: true });

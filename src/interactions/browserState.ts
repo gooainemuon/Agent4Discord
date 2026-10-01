@@ -21,20 +21,20 @@ const STORE = path.join(CONFIG_DIR, 'browser-state.json');
 const MAX_ENTRIES = 500;
 const SEP = '~';
 
-let cache: Record<string, BrowserState> | null = null;
+let cache: Record<string, object> | null = null;
 
-function load(): Record<string, BrowserState> {
+function load(): Record<string, object> {
   if (cache) return cache;
   try {
-    cache = JSON.parse(fs.readFileSync(STORE, 'utf-8')) as Record<string, BrowserState>;
+    cache = JSON.parse(fs.readFileSync(STORE, 'utf-8')) as Record<string, object>;
   } catch {
     cache = {};
   }
   return cache;
 }
 
-/** Store a state and return its key. Same state, same key. */
-export function saveBrowserState(state: BrowserState): string {
+/** Store any component state (browser, model picker) and return its key. Same state, same key. */
+export function saveComponentState(state: object): string {
   const key = crypto.createHash('sha1').update(JSON.stringify(state)).digest('hex').slice(0, 12);
   const store = load();
   if (!store[key]) {
@@ -51,10 +51,13 @@ export function saveBrowserState(state: BrowserState): string {
   return key;
 }
 
-export function loadBrowserState(key: string | undefined): BrowserState | null {
+export function loadComponentState<T extends object>(key: string | undefined): T | null {
   if (!key) return null;
-  return load()[key] ?? null;
+  return (load()[key] as T | undefined) ?? null;
 }
+
+export const saveBrowserState = (state: BrowserState): string => saveComponentState(state);
+export const loadBrowserState = (key: string | undefined): BrowserState | null => loadComponentState<BrowserState>(key);
 
 export function withStateKey(customId: string, key: string): string {
   return `${customId}${SEP}${key}`;
