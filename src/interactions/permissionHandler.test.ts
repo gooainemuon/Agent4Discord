@@ -77,4 +77,11 @@ describe('requestPermission', () => {
     sessionManager.emit('stopped', 'ch-bash');
     sessionManager.emit('stopped', 'ch-edit');
   });
+
+  it('passes the original tool input on allow, not an empty object', async () => {
+    const { channel } = fakeChannel('ch-input');
+    const input = { file_path: '/p/a.ts', pattern: 'x' };
+    await expect(requestPermission(channel, 'u1', 'Read', input)).resolves.toEqual({ behavior: 'allow', updatedInput: input });
+  });
 });
+

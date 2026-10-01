@@ -66,12 +66,12 @@ export async function requestPermission(
 ): Promise<PermissionResult> {
   // Auto-allow safe tools
   if (AUTO_ALLOW_TOOLS.has(toolName)) {
-    return { behavior: 'allow', updatedInput: {} };
+    return { behavior: 'allow', updatedInput: toolInput };
   }
 
   // Check if user has "Always Allowed" this tool for this session
   if (isToolAlwaysAllowed(channel.id, toolName)) {
-    return { behavior: 'allow', updatedInput: {} };
+    return { behavior: 'allow', updatedInput: toolInput };
   }
 
   const requestId = randomUUID().slice(0, 8); // short ID for customId limit
@@ -179,7 +179,7 @@ export async function handlePermission(interaction: ButtonInteraction): Promise<
     const embed = EmbedBuilder.from(interaction.message.embeds[0])
       .setTitle('Permission Granted')
       .setColor(COLORS.IDLE);
-    pending.resolve({ behavior: 'allow', updatedInput: {} }); // first: a failed edit must not leave the tool waiting
+    pending.resolve({ behavior: 'allow', updatedInput: pending.toolInput }); // first: a failed edit must not leave the tool waiting
     await interaction.update({ embeds: [embed], components: [buildDisabledRow()] }).catch(() => {});
   } else if (action === 'always') {
     // Add to always-allowed set for this channel/session
@@ -191,7 +191,7 @@ export async function handlePermission(interaction: ButtonInteraction): Promise<
     const embed = EmbedBuilder.from(interaction.message.embeds[0])
       .setTitle(`Permission Granted (Always: ${pending.toolName})`)
       .setColor(COLORS.IDLE);
-    pending.resolve({ behavior: 'allow', updatedInput: {} }); // first: a failed edit must not leave the tool waiting
+    pending.resolve({ behavior: 'allow', updatedInput: pending.toolInput }); // first: a failed edit must not leave the tool waiting
     await interaction.update({ embeds: [embed], components: [buildDisabledRow()] }).catch(() => {});
   } else if (action === 'deny') {
     const embed = EmbedBuilder.from(interaction.message.embeds[0])
@@ -227,11 +227,11 @@ export function createPermissionCallback(
     const mode = session?.permissionMode ?? 'default';
 
     if (mode === 'bypassPermissions') {
-      return { behavior: 'allow', updatedInput: {} };
+      return { behavior: 'allow', updatedInput: toolInput };
     }
 
     if (mode === 'acceptEdits' && (toolName === 'Edit' || toolName === 'Write')) {
-      return { behavior: 'allow', updatedInput: {} };
+      return { behavior: 'allow', updatedInput: toolInput };
     }
 
     if (mode === 'plan' && WRITE_TOOLS.has(toolName)) {
