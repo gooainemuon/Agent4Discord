@@ -7,6 +7,7 @@ import { REST, Routes } from 'discord.js';
 import { handleInit } from './init.js';
 import { handleResume } from './resume.js';
 import { handleModel } from './model.js';
+import { EFFORT_LEVELS, handleEffort } from './effort.js';
 import { handleClose } from './close.js';
 import { handleSkill } from './skill.js';
 import { handleSh } from './sh.js';
@@ -37,6 +38,16 @@ const a4dCommand = new SlashCommandBuilder()
           .setDescription('Model to use')
           .setRequired(true)
           .addChoices(...MODEL_CHOICES.map((m) => ({ name: m.label, value: m.value })))
+      )
+  )
+  .addSubcommand((sub) =>
+    sub.setName('effort')
+      .setDescription('Change the reasoning effort for this session')
+      .addStringOption((opt) =>
+        opt.setName('level')
+          .setDescription('Effort level')
+          .setRequired(true)
+          .addChoices(...EFFORT_LEVELS.map((l) => ({ name: l, value: l })))
       )
   )
   .addSubcommand((sub) =>
@@ -83,6 +94,8 @@ commands.set('a4d', async (interaction: ChatInputCommandInteraction) => {
     await handleResume(interaction);
   } else if (subcommand === 'model') {
     await handleModel(interaction);
+  } else if (subcommand === 'effort') {
+    await handleEffort(interaction);
   } else if (subcommand === 'close') {
     await handleClose(interaction);
   } else if (subcommand === 'skill') {
