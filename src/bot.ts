@@ -30,6 +30,9 @@ export async function startBot(): Promise<void> {
       GatewayIntentBits.GuildMessages,
       GatewayIntentBits.MessageContent,
     ],
+    // Claude output, shell output and replayed history are posted verbatim: never let them ping
+    // @everyone, @here or roles. User mentions stay (permission requests mention the owner).
+    allowedMentions: { parse: ['users'], repliedUser: false },
   });
 
   // --- Ready ---
