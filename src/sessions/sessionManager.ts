@@ -237,6 +237,7 @@ class SessionManager extends EventEmitter {
     if (!session) return;
     session.query.close();
     session.state = 'stopped';
+    this.emit('stopped', channelId);
   }
 
   removeSession(channelId: string): void {

@@ -24,9 +24,20 @@ interface PendingPermission {
   userId: string; // session owner
   toolName: string;
   toolInput: Record<string, unknown>;
+  /** Deny and disable the buttons because the session ended. */
+  cancel: () => void;
 }
 
 const pendingPermissions = new Map<string, PendingPermission>();
+
+/** Deny every open request of a channel whose session ended, so no button is left that nothing waits on. */
+export function cancelPendingPermissions(channelId: string): void {
+  for (const pending of [...pendingPermissions.values()]) {
+    if (pending.channelId === channelId) pending.cancel();
+  }
+}
+
+sessionManager.on('stopped', (channelId: string) => cancelPendingPermissions(channelId));
 
 // Per-channel set of tool names that the user has "Always Allowed"
 const alwaysAllowedTools = new Map<string, Set<string>>();
@@ -41,7 +52,8 @@ export function clearAlwaysAllowed(channelId: string): void {
 
 /**
  * Request tool permission via Discord buttons.
- * Returns a promise that resolves when the user clicks Allow/Deny or times out.
+ * Returns a promise that resolves when the user clicks Allow/Deny. There is no timeout: the request
+ * stays open as long as the session lives (user 2026-10-01) and is denied when the session stops.
  */
 export async function requestPermission(
   channel: TextChannel,
@@ -93,21 +105,18 @@ export async function requestPermission(
   const msg = await channel.send({ content: `<@${userId}>`, embeds: [embed], components: [row] });
 
   return new Promise((resolve) => {
-    const timeout = setTimeout(() => {
-      pendingPermissions.delete(requestId);
-      const timedOutEmbed = EmbedBuilder.from(embed)
-        .setTitle(`${emoji} Permission Request (Timed Out)`)
-        .setColor(COLORS.STOPPED);
-      const disabledRow = buildDisabledRow();
-      msg.edit({ embeds: [timedOutEmbed], components: [disabledRow] }).catch(() => {});
-      resolve({ behavior: 'deny', message: 'Permission request timed out' });
-    }, 60_000);
-
     pendingPermissions.set(requestId, {
       resolve: (result) => {
-        clearTimeout(timeout);
         pendingPermissions.delete(requestId);
         resolve(result);
+      },
+      cancel: () => {
+        pendingPermissions.delete(requestId);
+        const cancelledEmbed = EmbedBuilder.from(embed)
+          .setTitle(`${emoji} Permission Request (Session Ended)`)
+          .setColor(COLORS.STOPPED);
+        msg.edit({ embeds: [cancelledEmbed], components: [buildDisabledRow()] }).catch(() => {});
+        resolve({ behavior: 'deny', message: 'Session ended before the request was answered' });
       },
       channelId: channel.id,
       messageId: msg.id,
