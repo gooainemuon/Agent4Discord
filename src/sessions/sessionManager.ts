@@ -37,6 +37,8 @@ export interface ActiveSession {
   totalCostUsd: number;
   createdAt: string;
   resolveNext: ((msg: SDKUserMessage) => void) | null;
+  /** Messages waiting for the SDK to ask for input; drained by the message stream in order. */
+  pendingMessages: SDKUserMessage[];
   abortController: AbortController;
 }
 
@@ -57,12 +59,16 @@ class SessionManager extends EventEmitter {
     const controller = new AbortController();
 
     let resolveNext: ((msg: SDKUserMessage) => void) | null = null;
+    // Messages sent before the SDK asks for the next one (e.g. right after start or resume) wait here.
+    const pending: SDKUserMessage[] = [];
 
     async function* messageStream(): AsyncGenerator<SDKUserMessage> {
       while (true) {
-        const msg = await new Promise<SDKUserMessage>((resolve) => {
-          resolveNext = resolve;
-        });
+        const msg =
+          pending.shift() ??
+          (await new Promise<SDKUserMessage>((resolve) => {
+            resolveNext = resolve;
+          }));
         yield msg;
       }
     }
@@ -110,6 +116,7 @@ class SessionManager extends EventEmitter {
       totalCostUsd: 0,
       createdAt: new Date().toISOString(),
       resolveNext: null,
+      pendingMessages: pending,
       abortController: controller,
     };
 
@@ -147,12 +154,16 @@ class SessionManager extends EventEmitter {
     const controller = new AbortController();
 
     let resolveNext: ((msg: SDKUserMessage) => void) | null = null;
+    // Messages sent before the SDK asks for the next one (e.g. right after start or resume) wait here.
+    const pending: SDKUserMessage[] = [];
 
     async function* messageStream(): AsyncGenerator<SDKUserMessage> {
       while (true) {
-        const msg = await new Promise<SDKUserMessage>((resolve) => {
-          resolveNext = resolve;
-        });
+        const msg =
+          pending.shift() ??
+          (await new Promise<SDKUserMessage>((resolve) => {
+            resolveNext = resolve;
+          }));
         yield msg;
       }
     }
@@ -204,6 +215,7 @@ class SessionManager extends EventEmitter {
       totalCostUsd: 0,
       createdAt: new Date().toISOString(),
       resolveNext: null,
+      pendingMessages: pending,
       abortController: controller,
     };
 
@@ -230,12 +242,17 @@ class SessionManager extends EventEmitter {
       throw new Error(`Session for channel ${channelId} is ${session.state}`);
     }
     session.state = 'running';
-    if (session.resolveNext) {
-      session.resolveNext({
-        type: 'user',
-        message: { role: 'user', content },
-        parent_tool_use_id: null,
-      } as SDKUserMessage);
+    const msg = {
+      type: 'user',
+      message: { role: 'user', content },
+      parent_tool_use_id: null,
+    } as SDKUserMessage;
+    const resolve = session.resolveNext;
+    if (resolve) {
+      session.resolveNext = null; // a resolver is single-use; the next message must not reuse it
+      resolve(msg);
+    } else {
+      session.pendingMessages.push(msg); // the stream is not waiting yet: do not drop the message
     }
   }
 
