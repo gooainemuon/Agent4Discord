@@ -89,10 +89,11 @@ export async function handleFork(
       interaction.client,
       session.permissionMode,
       true, // forkSession
+      session.effort,
     );
 
     // The fork's own id arrives with its init message and is persisted then.
-    saveSessionToGuild(guild.id, forkChannel.id, '', session.cwd, interaction.user.id);
+    saveSessionToGuild(guild.id, forkChannel.id, '', session.cwd, interaction.user.id, session.effort);
 
     const statusEmbed = buildStatusEmbed({
       status: 'Session Active (Fork)',

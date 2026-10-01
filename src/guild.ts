@@ -1,5 +1,6 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
+import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk';
 import { CONFIG_DIR } from './config.js';
 
 export interface GuildConfig {
@@ -21,6 +22,8 @@ export interface SessionEntry {
   cwd: string;
   createdAt: string;
   userId: string;
+  /** Effort picked at start or with /a4d effort; reapplied on resume. Absent = settings.json. */
+  effort?: EffortLevel;
 }
 
 const GUILDS_DIR = path.join(CONFIG_DIR, 'guilds');

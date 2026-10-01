@@ -6,6 +6,7 @@ import {
 import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk';
 import { sessionManager } from '../sessions/sessionManager.js';
 import { loadGuildConfig } from '../guild.js';
+import { updateSessionEffortInGuild } from '../sessions/sessionStore.js';
 
 export const EFFORT_LEVELS: readonly EffortLevel[] = ['low', 'medium', 'high', 'xhigh', 'max'];
 
@@ -53,6 +54,13 @@ export async function handleEffort(interaction: ChatInputCommandInteraction): Pr
     console.error('[effort] Failed to set effort:', err);
     await interaction.reply({ content: `Failed to change effort: ${err}`, flags: MessageFlags.Ephemeral });
     return;
+  }
+
+  session.effort = level;
+  try {
+    updateSessionEffortInGuild(guild.id, channel.id, level);
+  } catch (err) {
+    console.warn('[effort] Failed to persist effort:', err);
   }
 
   // Not ephemeral: the change stays visible in the channel history.

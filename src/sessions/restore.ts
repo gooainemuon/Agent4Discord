@@ -8,7 +8,7 @@ import { buildStatusEmbed, COLORS } from '../formatters/embedBuilder.js';
 import { createPermissionCallback } from '../interactions/permissionHandler.js';
 
 export type RestoreResult =
-  | { ok: true; sessionId: string; cwd: string }
+  | { ok: true; sessionId: string; cwd: string; effort?: string }
   | { ok: false; reason: string };
 
 async function findStatusMessage(channel: TextChannel, botId: string | undefined): Promise<Message | null> {
@@ -41,9 +41,10 @@ export async function restoreChannelSession(
   const cwd = rawCwd.startsWith('~') ? path.join(os.homedir(), rawCwd.slice(1)) : rawCwd;
   const model = embed.fields.find((f) => f.name === 'Model')?.value || 'opus';
 
+  const stored = getSessionsForGuild(guildId)[channel.id];
   let sessionId: string | undefined = embed.fields.find((f) => f.name === 'Session ID')?.value;
   if (!sessionId || sessionId === 'pending') {
-    sessionId = getSessionsForGuild(guildId)[channel.id]?.sessionId || undefined;
+    sessionId = stored?.sessionId || undefined;
   }
   if (!sessionId || sessionId === 'pending') {
     return { ok: false, reason: 'No session id recorded for this channel. Start a new session instead.' };
@@ -66,8 +67,11 @@ export async function restoreChannelSession(
     model,
     createPermissionCallback(channel, userId),
     client,
+    undefined, // permission mode
+    false, // forkSession
+    stored?.effort,
   );
-  saveSessionToGuild(guildId, channel.id, sessionId, cwd, userId);
+  saveSessionToGuild(guildId, channel.id, sessionId, cwd, userId, stored?.effort);
 
   await statusMsg.edit({
     embeds: [
@@ -83,7 +87,7 @@ export async function restoreChannelSession(
     ],
   });
 
-  return { ok: true, sessionId, cwd };
+  return { ok: true, sessionId, cwd, effort: stored?.effort };
 }
 
 /**
@@ -110,7 +114,7 @@ export async function autoResumeSessions(
         console.log(`[auto-resume] ${channelId}: ${result.ok ? `resumed ${result.sessionId}` : result.reason}`);
         await channel.send(
           result.ok
-            ? '🔄 봇이 다시 켜져서 이 세션을 자동으로 이어받았습니다. 하던 일이 있으면 이어서 시켜 주세요.'
+            ? `🔄 봇이 다시 켜져서 이 세션을 자동으로 이어받았습니다(effort: ${result.effort ?? 'settings.json'}). 하던 일이 있으면 이어서 시켜 주세요.`
             : `⚠️ 자동 복구를 건너뛰었습니다: ${result.reason}`,
         );
       } catch (err) {

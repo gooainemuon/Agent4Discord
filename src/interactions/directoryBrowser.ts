@@ -614,7 +614,7 @@ export async function handleModelConfirm(interaction: ButtonInteraction): Promis
     );
 
     // Persist to guild config
-    saveSessionToGuild(guild.id, channel.id, session.sessionId || '', cwdPath, interaction.user.id);
+    saveSessionToGuild(guild.id, channel.id, session.sessionId || '', cwdPath, interaction.user.id, session.effort);
 
     // Post and pin status embed with controls
     const statusEmbed = buildStatusEmbed({

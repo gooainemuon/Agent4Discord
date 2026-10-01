@@ -42,3 +42,14 @@ describe('updateSessionIdInGuild', () => {
     expect(JSON.parse(fs.readFileSync(file, 'utf-8')).activeSessions).toEqual({});
   });
 });
+
+describe('updateSessionEffortInGuild', () => {
+  it('stores the effort and keeps it when the session id is filled in later', async () => {
+    const file = writeGuild({ c1: { sessionId: '', cwd: '/p', createdAt: 't0', userId: 'u' } });
+    const { updateSessionEffortInGuild, updateSessionIdInGuild } = await import('./sessionStore.js');
+    updateSessionEffortInGuild(GUILD, 'c1', 'max');
+    updateSessionIdInGuild(GUILD, 'c1', 'sid-1');
+    const saved = JSON.parse(fs.readFileSync(file, 'utf-8')).activeSessions.c1;
+    expect(saved).toMatchObject({ sessionId: 'sid-1', effort: 'max' });
+  });
+});

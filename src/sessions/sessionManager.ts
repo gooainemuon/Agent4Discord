@@ -30,6 +30,8 @@ export interface ActiveSession {
   cwd: string;
   state: SessionState;
   permissionMode: PermissionMode;
+  /** Effort set for this session (picker, /a4d effort or restored); undefined = settings.json. */
+  effort?: EffortLevel;
   totalCostUsd: number;
   createdAt: string;
   resolveNext: ((msg: SDKUserMessage) => void) | null;
@@ -102,6 +104,7 @@ class SessionManager extends EventEmitter {
       cwd,
       state: 'running',
       permissionMode: permissionMode ?? 'default',
+      effort,
       totalCostUsd: 0,
       createdAt: new Date().toISOString(),
       resolveNext: null,
@@ -137,6 +140,7 @@ class SessionManager extends EventEmitter {
     client?: Client,
     permissionMode?: PermissionMode,
     forkSession = false,
+    effort?: EffortLevel,
   ): ActiveSession {
     const controller = new AbortController();
 
@@ -177,6 +181,7 @@ class SessionManager extends EventEmitter {
         // Without this, resume continues the same session file: two channels on one session
         // write into one transcript and each sees the other's messages.
         ...(forkSession && { forkSession: true }),
+        ...(effort && { effort }),
         canUseTool,
         plugins,
         ...(Object.keys(mcpServers).length > 0 && { mcpServers }),
@@ -193,6 +198,7 @@ class SessionManager extends EventEmitter {
       cwd,
       state: 'running',
       permissionMode: permissionMode ?? 'default',
+      effort,
       totalCostUsd: 0,
       createdAt: new Date().toISOString(),
       resolveNext: null,

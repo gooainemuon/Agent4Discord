@@ -1,4 +1,5 @@
 // Persist session metadata to guild config -- AGE-016
+import type { EffortLevel } from '@anthropic-ai/claude-agent-sdk';
 import {
   loadGuildConfig,
   saveGuildConfig,
@@ -11,6 +12,7 @@ export function saveSessionToGuild(
   sessionId: string,
   cwd: string,
   userId: string,
+  effort?: EffortLevel,
 ): void {
   const config = loadGuildConfig(guildId);
   if (!config) {
@@ -22,6 +24,7 @@ export function saveSessionToGuild(
     cwd,
     createdAt: new Date().toISOString(),
     userId,
+    ...(effort && { effort }),
   };
 
   saveGuildConfig(config);
@@ -33,6 +36,15 @@ export function updateSessionIdInGuild(guildId: string, channelId: string, sessi
   const entry = config?.activeSessions[channelId];
   if (!config || !entry || entry.sessionId === sessionId) return;
   entry.sessionId = sessionId;
+  saveGuildConfig(config);
+}
+
+/** Remember a channel's effort so a resume after a restart starts with it again. */
+export function updateSessionEffortInGuild(guildId: string, channelId: string, effort: EffortLevel): void {
+  const config = loadGuildConfig(guildId);
+  const entry = config?.activeSessions[channelId];
+  if (!config || !entry || entry.effort === effort) return;
+  entry.effort = effort;
   saveGuildConfig(config);
 }
 

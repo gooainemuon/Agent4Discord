@@ -60,6 +60,16 @@ async function load() {
 }
 
 describe('restoreChannelSession', () => {
+  it('starts the resumed session with the effort stored for the channel and keeps it stored', async () => {
+    writeGuild({ ch0: { sessionId: 'sid', cwd: '/proj', createdAt: 't', userId: 'u', effort: 'xhigh' } });
+    const { resume, restoreChannelSession } = await load();
+    const result = await restoreChannelSession(fakeChannel('ch0', 'sid').channel, GUILD, 'u', client);
+    expect(result).toMatchObject({ ok: true, effort: 'xhigh' });
+    expect(resume.mock.calls[0][10]).toBe('xhigh');
+    const saved = JSON.parse(fs.readFileSync(nodePath.join(home, '.agent4discord', 'guilds', `${GUILD}.json`), 'utf-8'));
+    expect(saved.activeSessions.ch0.effort).toBe('xhigh');
+  });
+
   it('uses the id stored for the channel when the embed still says pending', async () => {
     writeGuild({ ch1: { sessionId: 'stored-id', cwd: '/proj', createdAt: 't', userId: 'u' } });
     const { resume, restoreChannelSession } = await load();
