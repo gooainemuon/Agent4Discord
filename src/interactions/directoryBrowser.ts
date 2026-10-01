@@ -18,7 +18,8 @@ import {
   type StringSelectMenuInteraction,
   type TextChannel,
 } from 'discord.js';
-import { listSessions, getSessionMessages, type PermissionMode, type SDKSessionInfo } from '@anthropic-ai/claude-agent-sdk';
+import { listSessions, getSessionMessages, type EffortLevel, type PermissionMode, type SDKSessionInfo } from '@anthropic-ai/claude-agent-sdk';
+import { EFFORT_LEVELS } from '../commands/effort.js';
 import { isPathSafe, listDirectories } from '../utils/filesystem.js';
 import { DEFAULT_MODEL, modelLabel, modelSelectOptions } from '../utils/models.js';
 import { loadBrowserState, saveBrowserState, splitStateKey, withStateKey } from './browserState.js';
@@ -426,41 +427,8 @@ export async function handleSessionStart(interaction: ButtonInteraction): Promis
   }
 
   // Show ephemeral model picker instead of immediately creating the session
-  const modelSelect = new StringSelectMenuBuilder()
-    .setCustomId('a4d:model:select')
-    .setPlaceholder('Select a model...')
-    .addOptions(
-      ...modelSelectOptions(DEFAULT_MODEL),
-    );
-
-  const modelRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(modelSelect);
-
-  const permSelect = new StringSelectMenuBuilder()
-    .setCustomId('a4d:perm-mode:select')
-    .setPlaceholder('Permission mode...')
-    .addOptions(
-      { label: 'Default (ask for everything)', value: 'default', default: true },
-      { label: 'Accept Edits (auto-approve file changes)', value: 'acceptEdits' },
-      { label: 'Bypass Permissions (auto-approve all)', value: 'bypassPermissions', description: '⚠️ Dangerous' },
-      { label: 'Plan Mode (read-only)', value: 'plan' },
-    );
-
-  const permRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(permSelect);
-
-  const buttonRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-    new ButtonBuilder().setCustomId('a4d:model:confirm').setLabel('Start Session').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('a4d:model:cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
-  );
-
-  const embed = new EmbedBuilder()
-    .setTitle('Select Model')
-    .setDescription('Choose the Claude model and permission mode for this session.' + homeWarning(state.path))
-    .setFooter({ text: `${state.path} | model:opus | perm:default` })
-    .setColor(0x5865f2);
-
   await interaction.reply({
-    embeds: [embed],
-    components: [modelRow, permRow, buttonRow],
+    ...buildModelPicker({ path: state.path, model: DEFAULT_MODEL, perm: 'default', effort: 'default' }),
     ephemeral: true,
   });
 }
@@ -469,12 +437,26 @@ export async function handleSessionStart(interaction: ButtonInteraction): Promis
 // Model footer parser
 // ---------------------------------------------------------------------------
 
-function parseModelFooter(interaction: ButtonInteraction | StringSelectMenuInteraction): { path: string; model: string; perm: PermissionMode } {
+interface PickerState {
+  path: string;
+  model: string;
+  perm: PermissionMode;
+  /** 'default' = whatever settings.json gives; otherwise an EffortLevel. */
+  effort: string;
+}
+
+const EFFORT_CHOICES: { value: string; label: string }[] = [
+  { value: 'default', label: 'Effort: default (from settings.json)' },
+  ...EFFORT_LEVELS.map((l) => ({ value: l, label: `Effort: ${l}` })),
+];
+
+function parseModelFooter(interaction: ButtonInteraction | StringSelectMenuInteraction): PickerState {
   const text = interaction.message.embeds[0]?.footer?.text ?? '';
   const parts = text.split(' | ');
   const pathValue = parts[0] || os.homedir();
   let model = DEFAULT_MODEL;
   let perm: PermissionMode = 'default';
+  let effort = 'default';
   const validPerms: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk'];
   for (const part of parts) {
     if (part.startsWith('model:')) model = part.slice(6);
@@ -482,62 +464,20 @@ function parseModelFooter(interaction: ButtonInteraction | StringSelectMenuInter
       const val = part.slice(5);
       if (validPerms.includes(val as PermissionMode)) perm = val as PermissionMode;
     }
+    if (part.startsWith('effort:')) {
+      const val = part.slice(7);
+      if (EFFORT_CHOICES.some((c) => c.value === val)) effort = val;
+    }
   }
-  return { path: pathValue, model, perm };
+  return { path: pathValue, model, perm, effort };
 }
 
-// ---------------------------------------------------------------------------
-// Model selection handlers
-// ---------------------------------------------------------------------------
-
-/**
- * Handle model select menu -- update the embed footer with the chosen model.
- */
-export async function handleModelSelect(interaction: StringSelectMenuInteraction): Promise<void> {
-  const selected = interaction.values[0];
-  if (!selected) return;
-
-  const { path: cwdPath, perm } = parseModelFooter(interaction);
-
-  const modelSelect = new StringSelectMenuBuilder()
-    .setCustomId('a4d:model:select')
-    .setPlaceholder('Select a model...')
-    .addOptions(
-      ...modelSelectOptions(selected),
-    );
-
-  const modelRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(modelSelect);
-
-  const permSelect = buildPermSelectMenu(perm);
-  const permRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(permSelect);
-
-  const buttonRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
-    new ButtonBuilder().setCustomId('a4d:model:confirm').setLabel('Start Session').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('a4d:model:cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
-  );
-
-  const permLabels: Record<string, string> = {
-    default: 'Default',
-    acceptEdits: 'Accept Edits',
-    bypassPermissions: 'Bypass Permissions',
-    plan: 'Plan Mode',
-  };
-
-  const embed = new EmbedBuilder()
-    .setTitle('Select Model')
-    .setDescription(`Choose the Claude model and permission mode for this session.\nModel: **${modelLabel(selected)}**\nPermissions: **${permLabels[perm] ?? perm}**` + homeWarning(cwdPath))
-    .setFooter({ text: `${cwdPath} | model:${selected} | perm:${perm}` })
-    .setColor(0x5865f2);
-
-  await interaction.update({
-    embeds: [embed],
-    components: [modelRow, permRow, buttonRow],
-  });
-}
-
-// ---------------------------------------------------------------------------
-// Permission mode helpers
-// ---------------------------------------------------------------------------
+const PERM_LABELS: Record<string, string> = {
+  default: 'Default',
+  acceptEdits: 'Accept Edits',
+  bypassPermissions: 'Bypass Permissions',
+  plan: 'Plan Mode',
+};
 
 function buildPermSelectMenu(selectedPerm: string): StringSelectMenuBuilder {
   return new StringSelectMenuBuilder()
@@ -551,56 +491,72 @@ function buildPermSelectMenu(selectedPerm: string): StringSelectMenuBuilder {
     );
 }
 
-/**
- * Handle permission mode select menu -- update the embed footer with the chosen mode.
- */
-export async function handlePermModeSelect(interaction: StringSelectMenuInteraction): Promise<void> {
-  const selected = interaction.values[0];
-  if (!selected) return;
-
-  const { path: cwdPath, model } = parseModelFooter(interaction);
-
-  const permLabels: Record<string, string> = {
-    default: 'Default',
-    acceptEdits: 'Accept Edits',
-    bypassPermissions: 'Bypass Permissions',
-    plan: 'Plan Mode',
-  };
-
+/** The ephemeral "Select Model" picker: model, permission mode and effort, state in the footer. */
+export function buildModelPicker(st: PickerState): {
+  embeds: EmbedBuilder[];
+  components: ActionRowBuilder<MessageActionRowComponentBuilder>[];
+} {
   const modelSelect = new StringSelectMenuBuilder()
     .setCustomId('a4d:model:select')
     .setPlaceholder('Select a model...')
-    .addOptions(
-      ...modelSelectOptions(model),
-    );
+    .addOptions(...modelSelectOptions(st.model));
 
-  const modelRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(modelSelect);
+  const effortSelect = new StringSelectMenuBuilder()
+    .setCustomId('a4d:effort-mode:select')
+    .setPlaceholder('Effort...')
+    .addOptions(...EFFORT_CHOICES.map((c) => ({ ...c, default: c.value === st.effort })));
 
-  const permSelect = buildPermSelectMenu(selected);
-  const permRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(permSelect);
-
+  const row = (c: StringSelectMenuBuilder | ButtonBuilder) =>
+    new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(c);
   const buttonRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
     new ButtonBuilder().setCustomId('a4d:model:confirm').setLabel('Start Session').setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('a4d:model:cancel').setLabel('Cancel').setStyle(ButtonStyle.Secondary),
   );
 
+  const effortText = st.effort === 'default' ? 'default (from settings.json)' : st.effort;
   const embed = new EmbedBuilder()
     .setTitle('Select Model')
-    .setDescription(`Choose the Claude model and permission mode for this session.\nModel: **${modelLabel(model)}**\nPermissions: **${permLabels[selected] ?? selected}**` + homeWarning(cwdPath))
-    .setFooter({ text: `${cwdPath} | model:${model} | perm:${selected}` })
+    .setDescription(
+      'Choose the Claude model, permission mode and effort for this session.\n' +
+        `Model: **${modelLabel(st.model)}**\nPermissions: **${PERM_LABELS[st.perm] ?? st.perm}**\nEffort: **${effortText}**` +
+        homeWarning(st.path),
+    )
+    .setFooter({ text: `${st.path} | model:${st.model} | perm:${st.perm} | effort:${st.effort}` })
     .setColor(0x5865f2);
 
-  await interaction.update({
-    embeds: [embed],
-    components: [modelRow, permRow, buttonRow],
-  });
+  return { embeds: [embed], components: [row(modelSelect), row(buildPermSelectMenu(st.perm)), row(effortSelect), buttonRow] };
+}
+
+// ---------------------------------------------------------------------------
+// Model selection handlers
+// ---------------------------------------------------------------------------
+
+/** Model select menu: keep the other picks, change the model. */
+export async function handleModelSelect(interaction: StringSelectMenuInteraction): Promise<void> {
+  const selected = interaction.values[0];
+  if (!selected) return;
+  await interaction.update(buildModelPicker({ ...parseModelFooter(interaction), model: selected }));
+}
+
+/** Permission mode select menu: keep the other picks, change the mode. */
+export async function handlePermModeSelect(interaction: StringSelectMenuInteraction): Promise<void> {
+  const selected = interaction.values[0] as PermissionMode | undefined;
+  if (!selected || !(selected in PERM_LABELS)) return;
+  await interaction.update(buildModelPicker({ ...parseModelFooter(interaction), perm: selected }));
+}
+
+/** Effort select menu: keep the other picks, change the effort. */
+export async function handleEffortModeSelect(interaction: StringSelectMenuInteraction): Promise<void> {
+  const selected = interaction.values[0];
+  if (!selected || !EFFORT_CHOICES.some((c) => c.value === selected)) return;
+  await interaction.update(buildModelPicker({ ...parseModelFooter(interaction), effort: selected }));
 }
 
 /**
  * Handle model confirm button -- create session channel and start a Claude Code session.
  */
 export async function handleModelConfirm(interaction: ButtonInteraction): Promise<void> {
-  const { path: cwdPath, model, perm: permissionMode } = parseModelFooter(interaction);
+  const { path: cwdPath, model, perm: permissionMode, effort } = parseModelFooter(interaction);
   const guild = interaction.guild;
 
   if (!guild) {
@@ -654,6 +610,7 @@ export async function handleModelConfirm(interaction: ButtonInteraction): Promis
       createPermissionCallback(channel as TextChannel, interaction.user.id),
       interaction.client,
       permissionMode,
+      effort === 'default' ? undefined : (effort as EffortLevel),
     );
 
     // Persist to guild config

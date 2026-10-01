@@ -12,6 +12,7 @@ import {
   handleModelConfirm,
   handleModelSelect,
   handlePermModeSelect,
+  handleEffortModeSelect,
   handleResumeBack,
   handleResumeBrowse,
   handleResumeSession,
@@ -102,6 +103,11 @@ export async function routeInteraction(
         await interaction.reply({ content: 'Unknown model selection action.', ephemeral: true });
         return;
     }
+  }
+
+  if (customId === 'a4d:effort-mode:select') {
+    await handleEffortModeSelect(interaction as StringSelectMenuInteraction);
+    return;
   }
 
   if (customId === 'a4d:perm-mode:select') {

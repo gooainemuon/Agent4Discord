@@ -70,3 +70,23 @@ describe('buildBrowserMessage', () => {
     expect(a).not.toBe(b);
   });
 });
+
+describe('buildModelPicker', () => {
+  it('has model, permission and effort menus and keeps every pick in the footer', async () => {
+    const { buildModelPicker } = await import('./directoryBrowser.js');
+    const picker = buildModelPicker({ path: project, model: 'fable', perm: 'acceptEdits', effort: 'xhigh' });
+    const rows = picker.components.map((r) => r.toJSON().components) as unknown as {
+      custom_id: string;
+      options?: { value: string; default?: boolean }[];
+    }[][];
+    expect(rows.map((r) => r[0].custom_id)).toEqual([
+      'a4d:model:select',
+      'a4d:perm-mode:select',
+      'a4d:effort-mode:select',
+      'a4d:model:confirm',
+    ]);
+    expect(rows[2][0].options?.filter((o) => o.default).map((o) => o.value)).toEqual(['xhigh']);
+    expect(rows[2][0].options?.map((o) => o.value)).toEqual(['default', 'low', 'medium', 'high', 'xhigh', 'max']);
+    expect(picker.embeds[0].toJSON().footer?.text).toBe(`${project} | model:fable | perm:acceptEdits | effort:xhigh`);
+  });
+});

@@ -5,6 +5,7 @@ import { EventEmitter } from 'node:events';
 import {
   query,
   type CanUseTool,
+  type EffortLevel,
   type PermissionMode,
   type Query,
   type SDKUserMessage,
@@ -47,6 +48,7 @@ class SessionManager extends EventEmitter {
     canUseTool?: CanUseTool,
     client?: Client,
     permissionMode?: PermissionMode,
+    effort?: EffortLevel,
   ): ActiveSession {
     const controller = new AbortController();
 
@@ -83,6 +85,7 @@ class SessionManager extends EventEmitter {
         permissionMode: permissionMode === 'plan' ? 'plan' : 'default',
         includePartialMessages: true,
         abortController: controller,
+        ...(effort && { effort }),
         canUseTool,
         plugins,
         ...(Object.keys(mcpServers).length > 0 && { mcpServers }),
