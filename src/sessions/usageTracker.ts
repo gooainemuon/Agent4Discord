@@ -1,6 +1,4 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import os from 'node:os';
+import type { Query, SDKControlGetUsageResponse } from '@anthropic-ai/claude-agent-sdk';
 import {
   ActionRowBuilder,
   ButtonBuilder,
@@ -12,50 +10,24 @@ import {
 } from 'discord.js';
 import { COLORS } from '../formatters/embedBuilder.js';
 import { loadGuildConfig } from '../guild.js';
+import { withProbeQuery } from '../utils/probeQuery.js';
+import { sessionManager } from './sessionManager.js';
 
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
 
-interface OAuthCredentials {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: number;
-}
-
-interface RateLimit {
-  utilization: number | null;
-  resets_at: string | null;
-}
-
-interface ExtraUsage {
-  is_enabled: boolean;
-  monthly_limit: number | null;
-  used_credits: number | null;
-  utilization: number | null;
-}
-
-interface UsageResponse {
-  five_hour?: RateLimit | null;
-  seven_day?: RateLimit | null;
-  seven_day_opus?: RateLimit | null;
-  seven_day_sonnet?: RateLimit | null;
-  extra_usage?: ExtraUsage | null;
-}
+type UsageResponse = NonNullable<SDKControlGetUsageResponse['rate_limits']>;
+type RateLimit = { utilization: number | null; resets_at: string | null };
 
 // ---------------------------------------------------------------------------
 // Constants
 // ---------------------------------------------------------------------------
 
-const CREDENTIALS_PATH = path.join(os.homedir(), '.claude', '.credentials.json');
-const OAUTH_TOKEN_URL = 'https://platform.claude.com/v1/oauth/token';
-const USAGE_API_URL = 'https://api.anthropic.com/api/oauth/usage';
-const CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e';
-const OAUTH_BETA_HEADER = 'oauth-2025-04-20';
-
-const MIN_POLL_INTERVAL = 60_000;      // 60s
-const MAX_POLL_INTERVAL = 600_000;     // 10 min
+const MIN_POLL_INTERVAL = 300_000;     // 5 min — the usage endpoint rate-limits aggressively
+const MAX_POLL_INTERVAL = 1_800_000;   // 30 min
 const BACKOFF_MULTIPLIER = 2;
+const EVENT_REFRESH_COOLDOWN = 60_000; // min gap between event-triggered refreshes
 
 // ---------------------------------------------------------------------------
 // State
@@ -63,141 +35,75 @@ const BACKOFF_MULTIPLIER = 2;
 
 let cachedUsage: UsageResponse | null = null;
 let lastFetchedAt = 0;
+let lastAttemptAt = 0;
 let currentPollInterval = MIN_POLL_INTERVAL;
 let pollTimer: ReturnType<typeof setTimeout> | null = null;
 let trackerClient: Client | null = null;
 let isOAuthAvailable = true;
-
-// ---------------------------------------------------------------------------
-// OAuth helpers
-// ---------------------------------------------------------------------------
-
-function readCredentials(): OAuthCredentials | null {
-  // PATCH: never read/refresh the Claude Code OAuth credentials.
-  // Avoids refresh-token races with the CLI and undocumented endpoint use.
-  return null;
-  try {
-    const raw = fs.readFileSync(CREDENTIALS_PATH, 'utf-8');
-    const data = JSON.parse(raw);
-    const oauth = data.claudeAiOauth;
-    if (!oauth?.accessToken || !oauth?.refreshToken) return null;
-    return {
-      accessToken: oauth.accessToken,
-      refreshToken: oauth.refreshToken,
-      expiresAt: oauth.expiresAt ?? 0,
-    };
-  } catch {
-    return null;
-  }
-}
-
-function writeCredentials(creds: OAuthCredentials): void {
-  return; // PATCH: never write credentials
-  try {
-    let data: any = {};
-    try {
-      data = JSON.parse(fs.readFileSync(CREDENTIALS_PATH, 'utf-8'));
-    } catch { /* fresh file */ }
-
-    data.claudeAiOauth = {
-      ...data.claudeAiOauth,
-      accessToken: creds.accessToken,
-      refreshToken: creds.refreshToken,
-      expiresAt: creds.expiresAt,
-    };
-    fs.writeFileSync(CREDENTIALS_PATH, JSON.stringify(data), 'utf-8');
-  } catch (err) {
-    console.error('[usage] Failed to write credentials:', err);
-  }
-}
-
-async function refreshAccessToken(refreshToken: string): Promise<OAuthCredentials | null> {
-  try {
-    const res = await fetch(OAUTH_TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        grant_type: 'refresh_token',
-        refresh_token: refreshToken,
-        client_id: CLIENT_ID,
-      }),
-    });
-
-    if (!res.ok) {
-      console.error(`[usage] Token refresh failed: ${res.status}`);
-      return null;
-    }
-
-    const data = await res.json() as any;
-    const creds: OAuthCredentials = {
-      accessToken: data.access_token,
-      refreshToken: data.refresh_token ?? refreshToken,
-      expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
-    };
-
-    writeCredentials(creds);
-    return creds;
-  } catch (err) {
-    console.error('[usage] Token refresh error:', err);
-    return null;
-  }
-}
-
-async function getValidToken(): Promise<string | null> {
-  let creds = readCredentials();
-  if (!creds) return null;
-
-  // Refresh if expired or expiring within 5 minutes
-  if (creds.expiresAt < Date.now() + 300_000) {
-    creds = await refreshAccessToken(creds.refreshToken);
-    if (!creds) return null;
-  }
-
-  return creds.accessToken;
-}
+let inFlight: Promise<UsageResponse | null> | null = null;
 
 // ---------------------------------------------------------------------------
 // Usage API
 // ---------------------------------------------------------------------------
 
-async function fetchUsage(): Promise<UsageResponse | null> {
-  const token = await getValidToken();
-  if (!token) {
-    isOAuthAvailable = false;
-    return null;
+// The SDK's /usage control request lets the Claude CLI handle credentials (Keychain on
+// macOS, token refresh) instead of us touching OAuth tokens. It is marked experimental.
+function requestUsage(q: Query): Promise<SDKControlGetUsageResponse> {
+  return q.usage_EXPERIMENTAL_MAY_CHANGE_DO_NOT_RELY_ON_THIS_API_YET({ skipBehaviors: true });
+}
+
+async function queryUsage(): Promise<SDKControlGetUsageResponse> {
+  // Reuse a live session's CLI process when there is one, to avoid spawning another
+  const live = sessionManager.getAllSessions().find((s) => s.state === 'idle' || s.state === 'running');
+  if (live) {
+    try {
+      return await requestUsage(live.query);
+    } catch (err) {
+      console.error('[usage] Live session usage request failed, using probe:', err);
+    }
   }
+  return withProbeQuery(requestUsage);
+}
 
+function backOff(reason: string): void {
+  currentPollInterval = Math.min(currentPollInterval * BACKOFF_MULTIPLIER, MAX_POLL_INTERVAL);
+  console.log(`[usage] ${reason}, backing off to ${currentPollInterval / 1000}s`);
+}
+
+async function doFetchUsage(): Promise<UsageResponse | null> {
+  lastAttemptAt = Date.now();
   try {
-    const res = await fetch(USAGE_API_URL, {
-      headers: {
-        'Authorization': `Bearer ${token}`,
-        'anthropic-beta': OAUTH_BETA_HEADER,
-        'Content-Type': 'application/json',
-      },
-    });
+    const res = await queryUsage();
 
-    if (res.status === 429) {
-      // Rate limited — back off
-      currentPollInterval = Math.min(currentPollInterval * BACKOFF_MULTIPLIER, MAX_POLL_INTERVAL);
-      console.log(`[usage] Rate limited, backing off to ${currentPollInterval / 1000}s`);
+    if (!res.rate_limits_available) {
+      // API key / Bedrock / Vertex — plan limits do not apply
+      isOAuthAvailable = false;
+      currentPollInterval = MAX_POLL_INTERVAL;
+      return null;
+    }
+    isOAuthAvailable = true;
+
+    if (!res.rate_limits) {
+      // Usually the upstream endpoint answering 429
+      backOff('No rate limit data returned');
       return cachedUsage;
     }
 
-    if (!res.ok) {
-      console.error(`[usage] API error: ${res.status}`);
-      return cachedUsage;
-    }
-
-    // Success — reset interval
     currentPollInterval = MIN_POLL_INTERVAL;
-    const data = await res.json() as UsageResponse;
-    cachedUsage = data;
+    cachedUsage = res.rate_limits;
     lastFetchedAt = Date.now();
-    return data;
+    return cachedUsage;
   } catch (err) {
     console.error('[usage] Fetch error:', err);
+    backOff('Fetch failed');
     return cachedUsage;
   }
+}
+
+/** Fetch usage, sharing one in-flight request between concurrent callers. */
+export function fetchUsage(): Promise<UsageResponse | null> {
+  inFlight ??= doFetchUsage().finally(() => { inFlight = null; });
+  return inFlight;
 }
 
 // ---------------------------------------------------------------------------
@@ -276,6 +182,13 @@ export function buildUsageEmbed(): EmbedBuilder {
   if (sonnetText) {
     embed.addFields({ name: '\ud83d\udcc5 Weekly Sonnet', value: sonnetText, inline: true });
   }
+  // Per-model weekly buckets reported by the server (e.g. Fable)
+  for (const scoped of cachedUsage.model_scoped ?? []) {
+    const text = formatLimit(scoped.display_name, scoped);
+    if (text) {
+      embed.addFields({ name: `\ud83d\udcc5 Weekly ${scoped.display_name}`.slice(0, 256), value: text, inline: true });
+    }
+  }
 
   // Extra usage
   if (cachedUsage.extra_usage?.is_enabled) {
@@ -293,7 +206,8 @@ export function buildUsageEmbed(): EmbedBuilder {
   }
 
   // No data at all
-  if (!cachedUsage.five_hour && !cachedUsage.seven_day && !cachedUsage.seven_day_opus && !cachedUsage.seven_day_sonnet) {
+  if (!cachedUsage.five_hour && !cachedUsage.seven_day && !cachedUsage.seven_day_opus && !cachedUsage.seven_day_sonnet
+    && !cachedUsage.model_scoped?.length) {
     embed.setDescription('No rate limit data available.');
   }
 
@@ -390,17 +304,13 @@ function schedulePoll(): void {
 export function setupUsageTracker(client: Client): void {
   trackerClient = client;
 
-  // Check if OAuth is available
-  const creds = readCredentials();
-  if (!creds) {
-    isOAuthAvailable = false;
-    console.log('[usage] No OAuth credentials found. Usage tracking disabled.');
-    // Still update embeds once to show the "not available" message
-    void updateAllGuilds();
-    return;
-  }
+  // Sessions emit rate_limit events when utilization changes; refresh promptly
+  // (rate-limited) rather than waiting for the next poll.
+  sessionManager.on('rate_limit', () => {
+    if (Date.now() - lastAttemptAt < EVENT_REFRESH_COOLDOWN) return;
+    void fetchUsage().then(() => updateAllGuilds());
+  });
 
-  console.log('[usage] OAuth credentials found. Starting usage polling.');
   // Initial fetch + start polling
   void poll();
 }

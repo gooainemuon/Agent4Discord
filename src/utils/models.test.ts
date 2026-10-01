@@ -1,20 +1,17 @@
-import { describe, expect, it } from 'vitest';
-import { DEFAULT_MODEL, MODEL_CHOICES, modelLabel, modelSelectOptions } from './models.js';
+import { afterEach, describe, expect, it } from 'vitest';
+import { resetModels } from '../sessions/modelCatalog.js';
+import { getDefaultModel, modelLabel, modelSelectOptions } from './models.js';
 
 describe('models', () => {
-  it('fits Discord limits for select options and slash command choices', () => {
-    expect(MODEL_CHOICES.length).toBeLessThanOrEqual(25);
-    for (const m of MODEL_CHOICES) expect(m.label.length).toBeLessThanOrEqual(100);
-    expect(new Set(MODEL_CHOICES.map((m) => m.value)).size).toBe(MODEL_CHOICES.length);
-  });
+  afterEach(() => resetModels());
 
   it('offers the default model', () => {
-    expect(MODEL_CHOICES.some((m) => m.value === DEFAULT_MODEL)).toBe(true);
+    expect(modelSelectOptions(getDefaultModel()).some((o) => o.value === getDefaultModel())).toBe(true);
   });
 
   it('marks exactly the selected model as default', () => {
-    const opts = modelSelectOptions('fable');
-    expect(opts.filter((o) => o.default).map((o) => o.value)).toEqual(['fable']);
+    const opts = modelSelectOptions('sonnet');
+    expect(opts.filter((o) => o.default).map((o) => o.value)).toEqual(['sonnet']);
   });
 
   it('falls back to the raw value for unknown models', () => {

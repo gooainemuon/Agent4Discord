@@ -21,7 +21,7 @@ import {
 import { listSessions, getSessionMessages, type EffortLevel, type PermissionMode, type SDKSessionInfo } from '@anthropic-ai/claude-agent-sdk';
 import { EFFORT_LEVELS } from '../commands/effort.js';
 import { isPathSafe, listDirectories } from '../utils/filesystem.js';
-import { DEFAULT_MODEL, modelLabel, modelSelectOptions } from '../utils/models.js';
+import { getDefaultModel, modelLabel, modelSelectOptions } from '../utils/models.js';
 import { loadBrowserState, loadComponentState, saveBrowserState, saveComponentState, splitStateKey, withStateKey } from './browserState.js';
 import { loadConfig } from '../config.js';
 import { chunkMessage } from '../formatters/chunker.js';
@@ -425,7 +425,7 @@ export async function handleSessionStart(interaction: ButtonInteraction): Promis
 
   // Show ephemeral model picker instead of immediately creating the session
   await interaction.reply({
-    ...buildModelPicker({ path: state.path, model: DEFAULT_MODEL, perm: 'default', effort: 'default' }),
+    ...buildModelPicker({ path: state.path, model: getDefaultModel(), perm: 'default', effort: 'default' }),
     ephemeral: true,
   });
 }
@@ -455,10 +455,10 @@ function parseModelFooter(interaction: ButtonInteraction | StringSelectMenuInter
   if (stored) return stored;
 
   const text = interaction.message.embeds[0]?.footer?.text ?? '';
-  if (!text) return { path: HOMEDIR, model: DEFAULT_MODEL, perm: 'default', effort: 'default', unknown: true };
+  if (!text) return { path: HOMEDIR, model: getDefaultModel(), perm: 'default', effort: 'default', unknown: true };
   const parts = text.split(' | ');
   const pathValue = parts[0] || os.homedir();
-  let model = DEFAULT_MODEL;
+  let model = getDefaultModel();
   let perm: PermissionMode = 'default';
   let effort = 'default';
   const validPerms: PermissionMode[] = ['default', 'acceptEdits', 'bypassPermissions', 'plan', 'dontAsk'];

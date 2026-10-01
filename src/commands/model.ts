@@ -1,8 +1,10 @@
 import {
   MessageFlags,
+  type AutocompleteInteraction,
   type ChatInputCommandInteraction,
 } from 'discord.js';
 import { requireSessionChannel } from './sessionChannel.js';
+import { getModelLabel, getModels, isKnownModel, MAX_DISCORD_CHOICES } from '../sessions/modelCatalog.js';
 import { buildStatusEmbed, COLORS } from '../formatters/embedBuilder.js';
 
 /**
@@ -14,6 +16,15 @@ export async function handleModel(interaction: ChatInputCommandInteraction): Pro
   const { channel, session } = ctx;
 
   const model = interaction.options.getString('model', true);
+
+  // Autocomplete allows free text, so reject anything the CLI didn't report
+  if (!isKnownModel(model)) {
+    await interaction.reply({
+      content: `Unknown model \`${model}\`. Pick one from the suggestions.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
 
   try {
     await session.query.setModel(model);
@@ -46,5 +57,20 @@ export async function handleModel(interaction: ChatInputCommandInteraction): Pro
     // Status embed update is best-effort
   }
 
-  await interaction.reply({ content: `Model changed to **${model}**.`, flags: MessageFlags.Ephemeral });
+  await interaction.reply({ content: `Model changed to **${getModelLabel(model)}**.`, flags: MessageFlags.Ephemeral });
+}
+
+/**
+ * Suggest models for `/a4d model` from the dynamically fetched list.
+ */
+export async function handleModelAutocomplete(interaction: AutocompleteInteraction): Promise<void> {
+  const input = interaction.options.getFocused().toLowerCase();
+  const choices = getModels()
+    .filter((m) => m.value.toLowerCase().includes(input) || m.displayName.toLowerCase().includes(input))
+    .slice(0, MAX_DISCORD_CHOICES)
+    .map((m) => ({
+      name: (m.description ? `${m.displayName} — ${m.description}` : m.displayName).slice(0, 100),
+      value: m.value,
+    }));
+  await interaction.respond(choices);
 }

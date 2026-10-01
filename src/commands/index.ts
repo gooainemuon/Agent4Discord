@@ -14,7 +14,6 @@ import { handleSh } from './sh.js';
 import { handleBrowser } from './browser.js';
 import { handlePermission as handlePermissionCmd } from './permission.js';
 import { handleFork } from './fork.js';
-import { MODEL_CHOICES } from '../utils/models.js';
 
 /** Handler function type for slash commands. */
 export type CommandHandler = (interaction: ChatInputCommandInteraction) => Promise<void>;
@@ -37,7 +36,7 @@ const a4dCommand = new SlashCommandBuilder()
         opt.setName('model')
           .setDescription('Model to use')
           .setRequired(true)
-          .addChoices(...MODEL_CHOICES.map((m) => ({ name: m.label, value: m.value })))
+          .setAutocomplete(true)
       )
   )
   .addSubcommand((sub) =>
