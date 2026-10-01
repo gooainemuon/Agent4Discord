@@ -139,6 +139,7 @@ export async function runSetup(): Promise<void> {
     permissionMode: 'default',
     logLevel: 'info',
     maxSessionsPerUser: 10,
+    autoResumeSessions: true,
   };
 
   saveConfig(config);

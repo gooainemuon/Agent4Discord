@@ -115,11 +115,14 @@ A4D - Sessions
   "claudeModel": "opus",
   "permissionMode": "default",
   "logLevel": "info",
-  "maxSessionsPerUser": 10
+  "maxSessionsPerUser": 10,
+  "autoResumeSessions": true
 }
 ```
 
 `maxSessionsPerUser`(기본 10)는 한 사용자가 동시에 띄울 수 있는 세션 수입니다(시작·재개·fork 공통). 세션을 시작할 때마다 다시 읽으므로 봇을 재시작하지 않아도 됩니다.
+
+`autoResumeSessions`(기본 true)는 봇이 다시 켜질 때 `A4D - Sessions` 의 세션 채널을 자동으로 이어받을지입니다. 결과는 각 채널에 한 줄로 남습니다.
 
 ## 개발
 

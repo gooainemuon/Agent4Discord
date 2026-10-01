@@ -12,6 +12,8 @@ export interface AppConfig {
   ownerIds: string[];
   /** Active sessions one user may run at once (start, resume, fork). */
   maxSessionsPerUser: number;
+  /** Resume the session channels that were active when the bot starts again. */
+  autoResumeSessions: boolean;
 }
 
 export const CONFIG_DIR: string = path.join(os.homedir(), '.agent4discord');
@@ -22,6 +24,7 @@ const DEFAULTS: Partial<AppConfig> = {
   permissionMode: 'default',
   logLevel: 'info',
   maxSessionsPerUser: 10,
+  autoResumeSessions: true,
 };
 
 export function loadConfig(): AppConfig {
@@ -58,6 +61,7 @@ export function loadConfig(): AppConfig {
     maxSessionsPerUser: Number.isInteger(obj['maxSessionsPerUser']) && (obj['maxSessionsPerUser'] as number) > 0
       ? (obj['maxSessionsPerUser'] as number)
       : (DEFAULTS.maxSessionsPerUser as number),
+    autoResumeSessions: typeof obj['autoResumeSessions'] === 'boolean' ? obj['autoResumeSessions'] : true,
   };
 }
 

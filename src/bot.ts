@@ -5,6 +5,8 @@ import {
   type ChatInputCommandInteraction,
 } from 'discord.js';
 import { loadConfig } from './config.js';
+import { autoResumeSessions } from './sessions/restore.js';
+import { loadGuildConfig } from './guild.js';
 import { commands, registerCommands } from './commands/index.js';
 import { routeInteraction, routeModalSubmit } from './interactions/index.js';
 import { sessionManager } from './sessions/sessionManager.js';
@@ -41,6 +43,14 @@ export async function startBot(): Promise<void> {
       } catch (err) {
         console.error(`Failed to register commands for guild ${guildId}:`, err);
       }
+    }
+
+    if (config.autoResumeSessions) {
+      const guilds = [...readyClient.guilds.cache.keys()]
+        .map((id) => loadGuildConfig(id))
+        .filter((g): g is NonNullable<typeof g> => g !== null)
+        .map((g) => ({ guildId: g.guildId, sessionsCategoryId: g.sessionsCategoryId, entries: g.activeSessions }));
+      void autoResumeSessions(readyClient, guilds).catch((err) => console.error('[auto-resume] failed:', err));
     }
   });
 

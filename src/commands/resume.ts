@@ -1,19 +1,15 @@
-import os from 'node:os';
-import path from 'node:path';
 import {
   MessageFlags,
   type ChatInputCommandInteraction,
   type TextChannel,
 } from 'discord.js';
 import { sessionManager } from '../sessions/sessionManager.js';
-import { getSessionsForGuild, saveSessionToGuild } from '../sessions/sessionStore.js';
 import { loadGuildConfig } from '../guild.js';
-import { buildStatusEmbed, COLORS } from '../formatters/embedBuilder.js';
-import { createPermissionCallback } from '../interactions/permissionHandler.js';
+import { restoreChannelSession } from '../sessions/restore.js';
 
 /**
  * Handle `/a4d resume` -- resume a stopped/archived session in the current channel.
- * Reads the sessionId and cwd from the pinned status embed.
+ * The lookup and the duplicate check live in restoreChannelSession.
  */
 export async function handleResume(interaction: ChatInputCommandInteraction): Promise<void> {
   const guild = interaction.guild;
@@ -48,64 +44,6 @@ export async function handleResume(interaction: ChatInputCommandInteraction): Pr
     return;
   }
 
-  // Find the status embed -- try pinned first, then search recent messages
-  const pinned = await channel.messages.fetchPins();
-  let statusMsg = pinned.items.find(
-    (p) => p.message.author.id === interaction.client.user?.id &&
-      p.message.embeds.length > 0 &&
-      p.message.embeds[0].fields.some((f) => f.name === 'Session ID'),
-  )?.message ?? null;
-
-  if (!statusMsg) {
-    const recent = await channel.messages.fetch({ limit: 50 });
-    statusMsg = recent.find(
-      (m) => m.author.id === interaction.client.user?.id &&
-        m.embeds.length > 0 &&
-        m.embeds[0].fields.some((f) => f.name === 'Session ID'),
-    ) ?? null;
-  }
-
-  if (!statusMsg || statusMsg.embeds.length === 0) {
-    await interaction.reply({ content: 'No session status embed found in this channel.', flags: MessageFlags.Ephemeral });
-    return;
-  }
-
-  const embed = statusMsg.embeds[0];
-  const rawCwd = embed.fields.find((f) => f.name === 'Directory')?.value;
-  let sessionId = embed.fields.find((f) => f.name === 'Session ID')?.value;
-  const model = embed.fields.find((f) => f.name === 'Model')?.value || 'opus';
-
-  if (!rawCwd) {
-    await interaction.reply({ content: 'Could not find directory info in the status embed.', flags: MessageFlags.Ephemeral });
-    return;
-  }
-
-  // Resolve ~ back to absolute path
-  const cwd = rawCwd.startsWith('~')
-    ? path.join(os.homedir(), rawCwd.slice(1))
-    : rawCwd;
-
-  // If the embed never got the real id, use the one stored for this channel. Never fall back to
-  // "the newest session in this directory": with several channels in one directory, they would all
-  // attach to the same session and share one transcript.
-  if (!sessionId || sessionId === 'pending') {
-    sessionId = getSessionsForGuild(guild.id)[channel.id]?.sessionId || undefined;
-  }
-
-  if (!sessionId || sessionId === 'pending') {
-    await interaction.reply({ content: 'No session id recorded for this channel. Start a new session instead.', flags: MessageFlags.Ephemeral });
-    return;
-  }
-
-  const holder = sessionManager.findActiveBySessionId(sessionId, channel.id);
-  if (holder) {
-    await interaction.reply({
-      content: `This session is already open in <#${holder.channelId}>. Close it there first, or use \`/a4d fork\` there to branch it.`,
-      flags: MessageFlags.Ephemeral,
-    });
-    return;
-  }
-
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   try {
@@ -119,33 +57,11 @@ export async function handleResume(interaction: ChatInputCommandInteraction): Pr
       });
     }
 
-    // Resume the session
-    const session = sessionManager.resumeSession(
-      guild.id,
-      interaction.user.id,
-      channel.id,
-      sessionId,
-      cwd,
-      model,
-      createPermissionCallback(channel, interaction.user.id),
-      interaction.client,
-    );
-
-    // Persist to guild config
-    saveSessionToGuild(guild.id, channel.id, sessionId, cwd, interaction.user.id);
-
-    // Update the status embed to active
-    const updatedEmbed = buildStatusEmbed({
-      status: 'Session Active',
-      color: COLORS.IDLE,
-      cwd,
-      model,
-      sessionId,
-      costUsd: session.totalCostUsd,
-      startedAt: new Date().toISOString(),
-    });
-
-    await statusMsg.edit({ embeds: [updatedEmbed] });
+    const result = await restoreChannelSession(channel, guild.id, interaction.user.id, interaction.client);
+    if (!result.ok) {
+      await interaction.editReply({ content: result.reason });
+      return;
+    }
 
     await interaction.editReply({ content: 'Session resumed! You can start chatting again.' });
 

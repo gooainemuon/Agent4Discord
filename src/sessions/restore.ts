@@ -1,0 +1,122 @@
+// Re-attach a channel to its Claude session: shared by /a4d resume and auto-resume at startup.
+import os from 'node:os';
+import path from 'node:path';
+import type { Client, Message, TextChannel } from 'discord.js';
+import { sessionManager } from './sessionManager.js';
+import { getSessionsForGuild, saveSessionToGuild } from './sessionStore.js';
+import { buildStatusEmbed, COLORS } from '../formatters/embedBuilder.js';
+import { createPermissionCallback } from '../interactions/permissionHandler.js';
+
+export type RestoreResult =
+  | { ok: true; sessionId: string; cwd: string }
+  | { ok: false; reason: string };
+
+async function findStatusMessage(channel: TextChannel, botId: string | undefined): Promise<Message | null> {
+  const isStatus = (m: Message) =>
+    m.author.id === botId && m.embeds.length > 0 && m.embeds[0].fields.some((f) => f.name === 'Session ID');
+  const pinned = await channel.messages.fetchPins();
+  const fromPins = pinned.items.find((p) => isStatus(p.message))?.message;
+  if (fromPins) return fromPins;
+  const recent = await channel.messages.fetch({ limit: 50 });
+  return recent.find(isStatus) ?? null;
+}
+
+/**
+ * Resume the Claude session recorded for `channel`. Reads directory, model and session id from the
+ * status embed, falling back to the id stored for this channel. Never picks "the newest session in
+ * the directory", and refuses a session another channel already runs.
+ */
+export async function restoreChannelSession(
+  channel: TextChannel,
+  guildId: string,
+  userId: string,
+  client: Client,
+): Promise<RestoreResult> {
+  const statusMsg = await findStatusMessage(channel, client.user?.id);
+  if (!statusMsg) return { ok: false, reason: 'No session status embed found in this channel.' };
+
+  const embed = statusMsg.embeds[0];
+  const rawCwd = embed.fields.find((f) => f.name === 'Directory')?.value;
+  if (!rawCwd) return { ok: false, reason: 'Could not find directory info in the status embed.' };
+  const cwd = rawCwd.startsWith('~') ? path.join(os.homedir(), rawCwd.slice(1)) : rawCwd;
+  const model = embed.fields.find((f) => f.name === 'Model')?.value || 'opus';
+
+  let sessionId: string | undefined = embed.fields.find((f) => f.name === 'Session ID')?.value;
+  if (!sessionId || sessionId === 'pending') {
+    sessionId = getSessionsForGuild(guildId)[channel.id]?.sessionId || undefined;
+  }
+  if (!sessionId || sessionId === 'pending') {
+    return { ok: false, reason: 'No session id recorded for this channel. Start a new session instead.' };
+  }
+
+  const holder = sessionManager.findActiveBySessionId(sessionId, channel.id);
+  if (holder) {
+    return {
+      ok: false,
+      reason: `This session is already open in <#${holder.channelId}>. Close it there first, or use \`/a4d fork\` there to branch it.`,
+    };
+  }
+
+  const session = sessionManager.resumeSession(
+    guildId,
+    userId,
+    channel.id,
+    sessionId,
+    cwd,
+    model,
+    createPermissionCallback(channel, userId),
+    client,
+  );
+  saveSessionToGuild(guildId, channel.id, sessionId, cwd, userId);
+
+  await statusMsg.edit({
+    embeds: [
+      buildStatusEmbed({
+        status: 'Session Active',
+        color: COLORS.IDLE,
+        cwd: rawCwd,
+        model,
+        sessionId,
+        costUsd: session.totalCostUsd,
+        startedAt: new Date().toISOString(),
+      }),
+    ],
+  });
+
+  return { ok: true, sessionId, cwd };
+}
+
+/**
+ * After a bot restart, resume every session channel that was active, one at a time.
+ * Each channel gets a one-line notice of the outcome.
+ */
+export async function autoResumeSessions(
+  client: Client,
+  guilds: { guildId: string; sessionsCategoryId: string; entries: Record<string, { userId: string }> }[],
+): Promise<void> {
+  for (const { guildId, sessionsCategoryId, entries } of guilds) {
+    for (const [channelId, entry] of Object.entries(entries)) {
+      const existing = sessionManager.getSession(channelId);
+      if (existing && existing.state !== 'stopped' && existing.state !== 'archived') continue;
+      let channel: TextChannel | null = null;
+      try {
+        channel = (await client.channels.fetch(channelId)) as TextChannel | null;
+      } catch {
+        channel = null; // deleted channel
+      }
+      if (!channel || channel.parentId !== sessionsCategoryId) continue;
+      try {
+        const result = await restoreChannelSession(channel, guildId, entry.userId, client);
+        console.log(`[auto-resume] ${channelId}: ${result.ok ? `resumed ${result.sessionId}` : result.reason}`);
+        await channel.send(
+          result.ok
+            ? '🔄 봇이 다시 켜져서 이 세션을 자동으로 이어받았습니다. 하던 일이 있으면 이어서 시켜 주세요.'
+            : `⚠️ 자동 복구를 건너뛰었습니다: ${result.reason}`,
+        );
+      } catch (err) {
+        console.error(`[auto-resume] ${channelId} failed:`, err);
+        await channel.send('⚠️ 자동 복구에 실패했습니다. `/a4d resume` 으로 다시 시도하세요.').catch(() => {});
+      }
+    }
+  }
+}
