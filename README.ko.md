@@ -37,6 +37,7 @@ Agent4Discord (A4D)는 [Claude Code](https://docs.anthropic.com/en/docs/claude-c
 - **파일 첨부** — Discord 첨부파일로 Claude에 파일 전송, Claude도 파일 전송 가능
 - **완료 알림** — Claude 응답 완료 시 @mention으로 알림
 - **세션 재개** — CLI에서 만든 세션이나 중단된 세션을 `/a4d resume`으로 재개
+- **재개 지시** — 봇이 다시 켜지면 세션을 자동으로 이어받고, 세션 디렉토리에 `.claude/a4d-on-resume.md`가 있으면 그 내용을 세션에 보냄 (예: 백그라운드 감시 다시 켜기)
 - **사용량 트래커** — `#a4d-usage` 채널에서 세션 비용, 토큰, 속도 제한 표시
 - **플러그인 지원** — 설치된 Claude Code 플러그인 (스킬, 훅) 자동 로드
 - **CLI 연동** — CLI와 동일한 JSONL 저장소를 공유하여 세션 호환

@@ -1,4 +1,5 @@
 // Re-attach a channel to its Claude session: shared by /a4d resume and auto-resume at startup.
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { Client, Message, TextChannel } from 'discord.js';
@@ -124,8 +125,23 @@ async function restoreUnlocked(
 }
 
 /**
+ * Project file whose text is sent to a session right after an automatic resume. A restart ends the
+ * session's background watches (e.g. an inbox Monitor); the project says here how to set them up again.
+ */
+export const RESUME_PROMPT_FILE = path.join('.claude', 'a4d-on-resume.md');
+
+/** The resume instructions of the project at `cwd`, or null when it has none. */
+export function readResumePrompt(cwd: string): string | null {
+  try {
+    return fs.readFileSync(path.join(cwd, RESUME_PROMPT_FILE), 'utf8').trim() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * After a bot restart, resume every session channel that was active, one at a time.
- * Each channel gets a one-line notice of the outcome.
+ * Each channel gets a one-line notice of the outcome, and the project's resume instructions if it has any.
  */
 export async function autoResumeSessions(
   client: Client,
@@ -147,11 +163,25 @@ export async function autoResumeSessions(
       try {
         const result = await restoreChannelSession(channel, guildId, entry.userId, client);
         console.log(`[auto-resume] ${channelId}: ${result.ok ? `resumed ${result.sessionId}` : result.reason}`);
+        const prompt = result.ok ? readResumePrompt(result.cwd) : null;
         await channel.send(
           result.ok
-            ? `🔄 봇이 다시 켜져서 이 세션을 자동으로 이어받았습니다(effort: ${result.effort ?? 'settings.json'}). 하던 일이 있으면 이어서 시켜 주세요.`
+            ? `🔄 봇이 다시 켜져서 이 세션을 자동으로 이어받았습니다(effort: ${result.effort ?? 'settings.json'}). ` +
+              (prompt ? `\`${RESUME_PROMPT_FILE}\` 의 재개 지시를 보냈습니다.` : '하던 일이 있으면 이어서 시켜 주세요.')
             : `⚠️ 자동 복구를 건너뛰었습니다: ${result.reason}`,
         );
+        if (prompt) {
+          try {
+            sessionManager.sendMessage(
+              channelId,
+              `[A4D auto-resume] The bot restarted and resumed this session. This message comes from the bot, ` +
+                `not from the user. Instructions from ${RESUME_PROMPT_FILE}:\n\n${prompt}`,
+            );
+          } catch (err) {
+            console.error(`[auto-resume] ${channelId}: failed to send the resume instructions:`, err);
+            await channel.send(`⚠️ \`${RESUME_PROMPT_FILE}\` 의 재개 지시를 보내지 못했습니다.`).catch(() => {});
+          }
+        }
       } catch (err) {
         console.error(`[auto-resume] ${channelId} failed:`, err);
         await channel.send('⚠️ 자동 복구에 실패했습니다. `/a4d resume` 으로 다시 시도하세요.').catch(() => {});

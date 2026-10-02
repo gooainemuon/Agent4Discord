@@ -37,6 +37,7 @@ Agent4Discord (A4D) is a self-hosted Discord bot that lets you interact with [Cl
 - **File Attachments** — Send files to Claude via Discord attachments, Claude can send files back
 - **Completion Notification** — @mentions you when Claude finishes responding
 - **Session Resume** — Resume CLI-created sessions or stopped sessions with `/a4d resume`
+- **Resume Instructions** — After a bot restart, sessions resume on their own; if the session directory has `.claude/a4d-on-resume.md`, its text is sent to the session (e.g. to restart a background watch)
 - **Usage Tracker** — `#a4d-usage` channel shows session costs, tokens, and rate limits
 - **Plugin Support** — Auto-loads your installed Claude Code plugins (skills, hooks)
 - **CLI Interop** — Sessions share the same JSONL storage as the CLI

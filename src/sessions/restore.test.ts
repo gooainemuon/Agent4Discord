@@ -15,25 +15,28 @@ function writeGuild(activeSessions: Record<string, unknown>): void {
   fs.writeFileSync(nodePath.join(dir, `${GUILD}.json`), JSON.stringify({ guildId: GUILD, activeSessions }));
 }
 
-function fakeChannel(id: string, sessionIdField: string) {
+function fakeChannel(id: string, sessionIdField: string, dir = '/proj') {
   const edit = vi.fn(async () => undefined);
   const statusMsg = {
     author: { id: BOT },
     embeds: [{ fields: [
-      { name: 'Directory', value: '/proj' },
+      { name: 'Directory', value: dir },
       { name: 'Model', value: 'opus' },
       { name: 'Session ID', value: sessionIdField },
     ] }],
     edit,
   };
+  const send = vi.fn(async (_text: string) => undefined);
   const channel = {
     id,
+    parentId: 'sessions-cat',
+    send,
     messages: {
       fetchPins: async () => ({ items: [{ message: statusMsg }] }),
       fetch: async () => ({ find: () => undefined }),
     },
   } as unknown as TextChannel;
-  return { channel, edit };
+  return { channel, edit, send };
 }
 
 const client = { user: { id: BOT } } as unknown as Client;
@@ -140,3 +143,35 @@ describe('restoreChannelSession', () => {
   });
 });
 
+
+describe('autoResumeSessions', () => {
+  async function run(projectFiles: Record<string, string>) {
+    const cwd = fs.mkdtempSync(nodePath.join(home, 'proj-'));
+    for (const [file, text] of Object.entries(projectFiles)) {
+      fs.mkdirSync(nodePath.dirname(nodePath.join(cwd, file)), { recursive: true });
+      fs.writeFileSync(nodePath.join(cwd, file), text);
+    }
+    writeGuild({ ch7: { sessionId: 'sid-7', cwd, createdAt: 't', userId: 'u' } });
+    const { sessionManager } = await load();
+    const relay = vi.spyOn(sessionManager, 'sendMessage').mockImplementation(() => {});
+    const { autoResumeSessions } = await import('./restore.js');
+    const { channel, send } = fakeChannel('ch7', 'sid-7', cwd);
+    const bot = { ...client, channels: { fetch: async () => channel } } as unknown as Client;
+    await autoResumeSessions(bot, [{ guildId: GUILD, sessionsCategoryId: 'sessions-cat', entries: { ch7: { userId: 'u' } } }]);
+    return { relay, send };
+  }
+
+  it("sends the project's resume instructions to the session and says so in the channel", async () => {
+    const { relay, send } = await run({ '.claude/a4d-on-resume.md': 'Re-arm the inbox watch.\n' });
+    expect(relay).toHaveBeenCalledOnce();
+    expect(relay.mock.calls[0][0]).toBe('ch7');
+    expect(relay.mock.calls[0][1]).toMatch(/not from the user[\s\S]*Re-arm the inbox watch\.$/);
+    expect(send.mock.calls[0][0]).toContain('a4d-on-resume.md');
+  });
+
+  it('sends nothing to the session when the project has no resume instructions', async () => {
+    const { relay, send } = await run({ '.claude/a4d-on-resume.md': '  \n' });
+    expect(relay).not.toHaveBeenCalled();
+    expect(send.mock.calls[0][0]).toContain('이어서 시켜 주세요');
+  });
+});
