@@ -13,9 +13,7 @@ import type { PermissionResult } from '@anthropic-ai/claude-agent-sdk';
 import { COLORS } from '../formatters/embedBuilder.js';
 import { formatToolInput, getToolEmoji } from '../formatters/toolFormatter.js';
 import { sessionManager } from '../sessions/sessionManager.js';
-
-// Auto-allow these safe tools
-const AUTO_ALLOW_TOOLS = new Set(['Read', 'Glob', 'Grep', 'LSP']);
+import { isAutoAllowed } from '../utils/autoAllow.js';
 
 // Tools whose "Always Allow" would be far broader than the one request shown.
 const NO_ALWAYS_ALLOW = new Set(['Bash']);
@@ -64,8 +62,8 @@ export async function requestPermission(
   toolName: string,
   toolInput: Record<string, unknown>,
 ): Promise<PermissionResult> {
-  // Auto-allow safe tools
-  if (AUTO_ALLOW_TOOLS.has(toolName)) {
+  // Only sensitive calls are asked: destructive, outward-facing or secret-touching (see autoAllow.ts)
+  if (isAutoAllowed(toolName, toolInput)) {
     return { behavior: 'allow', updatedInput: toolInput };
   }
 
@@ -87,7 +85,7 @@ export async function requestPermission(
 
   // Build buttons. No "Always Allow" for Bash: it is remembered per tool name, so one click would
   // allow every later shell command in the channel (rm -rf, push --force, curl | sh). Allow recurring
-  // commands with settings.json rules instead.
+  // commands with settings.json rules instead; only risky commands get here at all (autoAllow.ts).
   const offerAlways = !NO_ALWAYS_ALLOW.has(toolName);
   const row = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(
     new ButtonBuilder()

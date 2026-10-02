@@ -28,7 +28,7 @@ describe('requestPermission', () => {
     vi.useFakeTimers();
     const { channel, edit } = fakeChannel('ch-stop');
     let settled = false;
-    const result = requestPermission(channel, 'u1', 'Edit', { file_path: 'x' }).then((r) => {
+    const result = requestPermission(channel, 'u1', 'mcp__github__create_issue', { title: 'x' }).then((r) => {
       settled = true;
       return r;
     });
@@ -45,8 +45,8 @@ describe('requestPermission', () => {
     const a = fakeChannel('ch-a');
     const b = fakeChannel('ch-b');
     let bSettled = false;
-    const ra = requestPermission(a.channel, 'u1', 'Edit', { file_path: 'a' });
-    void requestPermission(b.channel, 'u1', 'Edit', { file_path: 'b' }).then(() => { bSettled = true; });
+    const ra = requestPermission(a.channel, 'u1', 'mcp__github__create_issue', { title: 'a' });
+    void requestPermission(b.channel, 'u1', 'mcp__github__create_issue', { title: 'b' }).then(() => { bSettled = true; });
     await Promise.resolve();
     await Promise.resolve();
 
@@ -59,7 +59,7 @@ describe('requestPermission', () => {
 
   it('denies at once when the session already ended while the request was being posted', async () => {
     const { channel, edit } = fakeChannel('ch-dead', 'stopped');
-    await expect(requestPermission(channel, 'u1', 'Edit', { file_path: 'x' })).resolves.toMatchObject({ behavior: 'deny' });
+    await expect(requestPermission(channel, 'u1', 'mcp__github__create_issue', { title: 'x' })).resolves.toMatchObject({ behavior: 'deny' });
     expect(edit).toHaveBeenCalledOnce();
   });
 
@@ -70,7 +70,7 @@ describe('requestPermission', () => {
     expect(buttonIds(bash.send)).toEqual(['allow', 'deny', 'details']);
 
     const edit = fakeChannel('ch-edit');
-    void requestPermission(edit.channel, 'u1', 'Edit', { file_path: 'x' });
+    void requestPermission(edit.channel, 'u1', 'mcp__github__create_issue', { title: 'x' });
     await vi.waitFor(() => expect(edit.send).toHaveBeenCalled());
     expect(buttonIds(edit.send)).toEqual(['allow', 'always', 'deny', 'details']);
 

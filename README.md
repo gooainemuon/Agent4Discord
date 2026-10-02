@@ -33,7 +33,7 @@ Agent4Discord (A4D) is a self-hosted Discord bot that lets you interact with [Cl
 - **Model & Permission Mode** — Choose opus/sonnet/haiku and permission level (default, auto-accept edits, full auto) when starting a session
 - **Real-time Streaming** — Live-updating embeds for text output, thinking, and tool progress
 - **Tool Call Threads** — Each tool execution gets its own thread with formatted input/output
-- **Permission Control** — Allow/Always Allow/Deny buttons for dangerous operations (auto-allow for safe tools)
+- **Permission Control** — Allow/Always Allow/Deny buttons only for risky calls (deletes, force push, installs, killing processes, secrets, unknown tools); everything else runs without asking
 - **File Attachments** — Send files to Claude via Discord attachments, Claude can send files back
 - **Completion Notification** — @mentions you when Claude finishes responding
 - **Session Resume** — Resume CLI-created sessions or stopped sessions with `/a4d resume`

@@ -33,7 +33,7 @@ Agent4Discord (A4D)는 [Claude Code](https://docs.anthropic.com/en/docs/claude-c
 - **모델 & 권한 모드** — 세션 시작 시 opus/sonnet/haiku와 권한 수준 (기본, 편집 자동승인, 전체 자동) 선택
 - **실시간 스트리밍** — 텍스트 출력, 생각, 도구 진행률을 라이브 업데이트 임베드로 표시
 - **도구 호출 스레드** — 각 도구 실행이 포맷된 입출력과 함께 개별 스레드로 생성
-- **권한 제어** — 위험한 작업에 Allow/Always Allow/Deny 버튼 (안전한 도구는 자동 허용)
+- **권한 제어** — 위험한 호출(삭제, force push, 설치, 프로세스 종료, 비밀 파일, 모르는 도구)에만 Allow/Always Allow/Deny 버튼, 나머지는 묻지 않고 실행
 - **파일 첨부** — Discord 첨부파일로 Claude에 파일 전송, Claude도 파일 전송 가능
 - **완료 알림** — Claude 응답 완료 시 @mention으로 알림
 - **세션 재개** — CLI에서 만든 세션이나 중단된 세션을 `/a4d resume`으로 재개

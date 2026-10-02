@@ -488,8 +488,8 @@ function buildPermSelectMenu(selectedPerm: string, id: (base: string) => string)
     .setCustomId(id('a4d:perm-mode:select'))
     .setPlaceholder('Permission mode...')
     .addOptions(
-      { label: 'Default (ask for everything)', value: 'default', default: selectedPerm === 'default' },
-      { label: 'Accept Edits (auto-approve file changes)', value: 'acceptEdits', default: selectedPerm === 'acceptEdits' },
+      { label: 'Default (ask only for risky actions)', value: 'default', default: selectedPerm === 'default' },
+      { label: 'Accept Edits (never ask for file edits)', value: 'acceptEdits', default: selectedPerm === 'acceptEdits' },
       { label: 'Bypass Permissions (auto-approve all)', value: 'bypassPermissions', description: '⚠️ Dangerous', default: selectedPerm === 'bypassPermissions' },
       { label: 'Plan Mode (read-only)', value: 'plan', default: selectedPerm === 'plan' },
     );

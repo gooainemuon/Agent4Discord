@@ -15,8 +15,8 @@ import { loadGuildConfig } from '../guild.js';
 import { buildStatusEmbed, COLORS } from '../formatters/embedBuilder.js';
 
 const PERM_OPTIONS: { label: string; value: PermissionMode; description: string }[] = [
-  { label: 'Default (ask for everything)', value: 'default', description: 'Show permission prompt for every tool call' },
-  { label: 'Accept Edits (auto-approve file changes)', value: 'acceptEdits', description: 'Auto-allow Edit/Write, ask for others' },
+  { label: 'Default (ask only for risky actions)', value: 'default', description: 'Ask for deletes, force push, installs, kills, secrets, unknown tools' },
+  { label: 'Accept Edits (never ask for file edits)', value: 'acceptEdits', description: 'Like Default, and edits to .env or settings files are not asked either' },
   { label: 'Bypass Permissions (allow all)', value: 'bypassPermissions', description: 'Auto-approve all tool calls' },
   { label: 'Plan Mode (read-only)', value: 'plan', description: 'Deny all write operations' },
 ];
