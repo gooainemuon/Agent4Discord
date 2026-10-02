@@ -69,13 +69,20 @@ describe('requestPermission', () => {
     await vi.waitFor(() => expect(bash.send).toHaveBeenCalled());
     expect(buttonIds(bash.send)).toEqual(['allow', 'deny', 'details']);
 
-    const edit = fakeChannel('ch-edit');
-    void requestPermission(edit.channel, 'u1', 'mcp__github__create_issue', { title: 'x' });
-    await vi.waitFor(() => expect(edit.send).toHaveBeenCalled());
-    expect(buttonIds(edit.send)).toEqual(['allow', 'always', 'deny', 'details']);
+    const mcp = fakeChannel('ch-mcp');
+    void requestPermission(mcp.channel, 'u1', 'mcp__github__create_issue', { title: 'x' });
+    await vi.waitFor(() => expect(mcp.send).toHaveBeenCalled());
+    expect(buttonIds(mcp.send)).toEqual(['allow', 'always', 'deny', 'details']);
 
     sessionManager.emit('stopped', 'ch-bash');
-    sessionManager.emit('stopped', 'ch-edit');
+    sessionManager.emit('stopped', 'ch-mcp');
+  });
+
+  it('runs a safe shell command without posting a request', async () => {
+    const { channel, send } = fakeChannel('ch-safe');
+    const input = { command: 'git -C /r log --oneline -5 && grep -rn foo /elsewhere | head' };
+    await expect(requestPermission(channel, 'u1', 'Bash', input)).resolves.toEqual({ behavior: 'allow', updatedInput: input });
+    expect(send).not.toHaveBeenCalled();
   });
 
   it('passes the original tool input on allow, not an empty object', async () => {
