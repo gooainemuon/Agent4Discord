@@ -24,6 +24,8 @@ const PERMISSION_BITS: bigint =
   BigInt(0x40) |          // Add Reactions
   BigInt(0x400000000) |   // Manage Threads
   BigInt(0x800000000) |   // Create Public Threads
+  BigInt(0x1000000000) |  // Create Private Threads (🔁 polling thread)
+  BigInt(0x4000000000) |  // Send Messages in Threads
   BigInt(0x2000) |        // Manage Messages
   (1n << 51n);            // Pin Messages (separated from Manage Messages since 2026-01-12)
 
