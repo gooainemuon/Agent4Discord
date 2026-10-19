@@ -1,7 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import type { EffortLevel, PermissionMode } from '@anthropic-ai/claude-agent-sdk';
-import { CONFIG_DIR } from './config.js';
+import { CONFIG_DIR, type ThreadMode } from './config.js';
 
 export interface GuildConfig {
   guildId: string;
@@ -30,6 +30,8 @@ export interface SessionEntry {
   permissionMode?: PermissionMode;
   /** Lane name set with "너는 <세션명>"; kept across resume so the start procedure runs only once. */
   sessionName?: string;
+  /** Tool-thread mode picked with /a4d threads; absent = config.json default. */
+  threadMode?: ThreadMode;
 }
 
 const GUILDS_DIR = path.join(CONFIG_DIR, 'guilds');

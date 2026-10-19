@@ -10,6 +10,8 @@ import { ToolProgressHandler } from './toolProgress.js';
 import { formatThreadName, formatToolInput, formatToolResult, sendToThread } from '../formatters/toolFormatter.js';
 import { trackChange, consumeChanges, storeDiffs } from './changeTracker.js';
 import { buildDiffMessage } from '../interactions/diffViewer.js';
+import { loadConfig, type ThreadMode } from '../config.js';
+import { endTurn, getPollingThread, getTurnThread, isPollingCall } from './toolThreads.js';
 
 // Track typing indicator intervals per channel
 const typingIntervals = new Map<string, ReturnType<typeof setInterval>>();
@@ -45,8 +47,10 @@ const recentlyFinalized = new Set<string>();
 // Track tool-call threads per channel for the current turn
 const turnThreads = new Map<string, string[]>();
 
-// Map tool_use_id → { thread, toolName } so we can send results back
-const toolUseThreads = new Map<string, { thread: ThreadChannel; toolName: string }>();
+// Map tool_use_id → where its result goes. thread null = the call is not shown (mode off), so the
+// result is dropped instead of waiting forever. label marks input and result in a shared thread.
+interface ToolTarget { thread: ThreadChannel | null; toolName: string; label?: string }
+const toolUseThreads = new Map<string, ToolTarget>();
 
 // Pending tool results that arrived before their thread was created (async race)
 interface PendingResult { block: any; resolve: () => void }
@@ -55,10 +59,11 @@ const pendingResults = new Map<string, PendingResult[]>();
 /** Register a thread and flush any pending results that were waiting for it. */
 async function registerToolThread(
   toolUseId: string,
-  thread: ThreadChannel,
+  thread: ThreadChannel | null,
   toolName: string,
+  label?: string,
 ): Promise<void> {
-  toolUseThreads.set(toolUseId, { thread, toolName });
+  toolUseThreads.set(toolUseId, { thread, toolName, label });
 
   const pending = pendingResults.get(toolUseId);
   if (pending) {
@@ -75,7 +80,11 @@ async function sendToolResult(toolUseId: string, block: any): Promise<void> {
   const entry = toolUseThreads.get(toolUseId);
   if (!entry) return;
 
-  const { thread, toolName } = entry;
+  const { thread, toolName, label } = entry;
+  if (!thread) {
+    toolUseThreads.delete(toolUseId);
+    return;
+  }
 
   let resultText = '';
   if (typeof block.content === 'string') {
@@ -89,7 +98,8 @@ async function sendToolResult(toolUseId: string, block: any): Promise<void> {
 
   if (!resultText) return;
 
-  const prefix = block.is_error ? '**Error:**\n' : '**Result:**\n';
+  const what = block.is_error ? 'Error' : 'Result';
+  const prefix = label ? `**${what} — ${label}**\n` : `**${what}:**\n`;
   const formatted = prefix + formatToolResult(toolName, resultText);
 
   let attachName: string | undefined;
@@ -107,11 +117,13 @@ async function sendToolResult(toolUseId: string, block: any): Promise<void> {
 
 function trackThread(channelId: string, threadId: string): void {
   const threads = turnThreads.get(channelId) || [];
-  threads.push(threadId);
+  if (!threads.includes(threadId)) threads.push(threadId);
   turnThreads.set(channelId, threads);
 }
 
+/** Threads of the finished turn, to archive; also closes the turn so the next call opens a new thread. */
 export function getAndClearTurnThreads(channelId: string): string[] {
+  endTurn(channelId);
   const threads = turnThreads.get(channelId) || [];
   turnThreads.delete(channelId);
   return threads;
@@ -156,6 +168,7 @@ let handlersRegistered = false;
 export function setupEventHandlers(client: Client): void {
   if (handlersRegistered) return;
   handlersRegistered = true;
+  const defaultThreadMode: ThreadMode = loadConfig().toolThreadMode;
   // --- Stream events (text / thinking deltas) ---
   sessionManager.on('stream_event', async (channelId: string, msg: any) => {
     const channel = client.channels.cache.get(channelId);
@@ -236,11 +249,14 @@ export function setupEventHandlers(client: Client): void {
         }
       }
 
-      // Handle tool_use blocks -- create threads for each
+      // Handle tool_use blocks -- route each to a thread according to the session's thread mode
       const toolUseBlocks = contentBlocks.filter((b) => b.type === 'tool_use');
 
       if (toolUseBlocks.length > 0) {
-        if (toolUseBlocks.length > 1) {
+        const session = sessionManager.getSession(channelId);
+        const mode: ThreadMode = session?.threadMode ?? defaultThreadMode;
+
+        if (mode === 'each' && toolUseBlocks.length > 1) {
           await textChannel.send(
             `\uD83D\uDD27 Executing ${toolUseBlocks.length} tool calls...`,
           );
@@ -264,15 +280,40 @@ export function setupEventHandlers(client: Client): void {
             });
           }
 
-          const threadName = formatThreadName(block.name || 'unknown', block.input || {});
-          const thread = await textChannel.threads.create({
-            name: threadName,
-            autoArchiveDuration: 60,
-            reason: `A4D tool call: ${block.name || 'unknown'}`,
-          });
-
           const toolName = block.name || 'unknown';
-          const inputText = formatToolInput(toolName, block.input || {});
+          const toolUseId = block.id || (block as any).tool_use_id;
+          const label = formatThreadName(toolName, block.input || {});
+
+          if (mode === 'off') {
+            if (toolUseId) await registerToolThread(toolUseId, null, toolName);
+            continue;
+          }
+
+          // Polling goes to the channel's private thread; otherwise the turn thread or a thread of its own.
+          let thread: ThreadChannel | null = null;
+          let shared = true;
+          if (isPollingCall(toolName, block.input) && session) {
+            thread = await getPollingThread(textChannel, session.userId);
+          }
+          if (!thread && mode === 'turn') {
+            thread = await getTurnThread(textChannel, toolName);
+            if (thread) trackThread(channelId, thread.id);
+          }
+          if (!thread && mode === 'each') {
+            shared = false;
+            thread = await textChannel.threads.create({
+              name: label,
+              autoArchiveDuration: 60,
+              reason: `A4D tool call: ${toolName}`,
+            });
+            trackThread(channelId, thread.id);
+          }
+          if (!thread) {
+            if (toolUseId) await registerToolThread(toolUseId, null, toolName);
+            continue;
+          }
+
+          const inputText = (shared ? `**${label}**\n` : '') + formatToolInput(toolName, block.input || {});
 
           // Determine a good filename for attachment if content is long
           let attachName: string | undefined;
@@ -287,12 +328,9 @@ export function setupEventHandlers(client: Client): void {
           await sendToThread(thread, inputText, attachName);
 
           // Track tool_use_id → thread and flush any pending results
-          const toolUseId = block.id || (block as any).tool_use_id;
           if (toolUseId) {
-            await registerToolThread(toolUseId, thread, toolName);
+            await registerToolThread(toolUseId, thread, toolName, shared ? label : undefined);
           }
-
-          trackThread(channelId, thread.id);
         }
       }
     }
@@ -349,6 +387,7 @@ export function setupEventHandlers(client: Client): void {
 
   sessionManager.on('result', async (channelId: string, msg: SDKResultMessage) => {
     stopTyping(channelId);
+    endTurn(channelId);
 
     // Clean up any lingering stream handlers
     await finalizeStreamsForChannel(channelId);
@@ -474,6 +513,7 @@ export function setupEventHandlers(client: Client): void {
 
   sessionManager.on('ended', async (channelId: string) => {
     stopTyping(channelId);
+    endTurn(channelId);
     await finalizeStreamsForChannel(channelId);
     const toolHandler = activeToolProgress.get(channelId);
     if (toolHandler) {
@@ -492,6 +532,7 @@ export function setupEventHandlers(client: Client): void {
 
   sessionManager.on('error', async (channelId: string, _err: unknown) => {
     stopTyping(channelId);
+    endTurn(channelId);
 
     // Clean up any active handlers on error
     await finalizeStreamsForChannel(channelId);

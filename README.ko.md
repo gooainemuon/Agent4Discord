@@ -32,7 +32,7 @@ Agent4Discord (A4D)는 [Claude Code](https://docs.anthropic.com/en/docs/claude-c
 - **디렉토리 브라우저** — 셀렉트 메뉴와 버튼으로 파일시스템 탐색, 디렉토리 생성 지원
 - **모델 & 권한 모드** — 세션 시작 시 opus/sonnet/haiku와 권한 수준 (기본, 편집 자동승인, 전체 자동) 선택
 - **실시간 스트리밍** — 텍스트 출력, 생각, 도구 진행률을 라이브 업데이트 임베드로 표시
-- **도구 호출 스레드** — 각 도구 실행이 포맷된 입출력과 함께 개별 스레드로 생성
+- **도구 호출 스레드** — 도구 호출은 턴마다 스레드 하나로 모이고, 짧은 `🔧 Bash ×5 · Read` 앵커 메시지에 붙음(채널에 "스레드를 시작하셨어요" 줄이 생기지 않음). `/a4d threads each` 는 호출마다 스레드, `off` 는 숨김. 인박스 폴링(`inbox`를 보는 읽기 전용 도구나 Bash `sleep`)은 비공개 `🔁 polling` 스레드로 감
 - **권한 제어** — 위험한 호출(삭제, force push, 설치, 프로세스 종료, 비밀 파일, 모르는 도구)에만 Allow/Always Allow/Deny 버튼, 나머지는 묻지 않고 실행
 - **파일 첨부** — Discord 첨부파일로 Claude에 파일 전송, Claude도 파일 전송 가능
 - **완료 알림** — Claude 응답 완료 시 @mention으로 알림
@@ -94,6 +94,7 @@ npx agent4discord@latest
 | `/a4d close` | 세션 종료 및 채널 삭제 |
 | `/a4d handoff [dir] [name]` | `YYYY-MM-DD-hhmm-<세션명>/` 폴더를 만들고 Claude 에게 인계 노트·인박스·작업 로그 작성을 요청 |
 | `/a4d clear` | 이 채널에서 새 세션 시작 (같은 폴더·모델·권한, 대화 기록 없음) |
+| `/a4d threads <turn\|each\|off>` | 도구 호출 표시 방식: 턴마다 스레드 하나(기본), 호출마다 하나, 숨김 |
 
 ## 채널 구조
 
@@ -120,13 +121,16 @@ A4D - Sessions
   "permissionMode": "default",
   "logLevel": "info",
   "maxSessionsPerUser": 10,
-  "autoResumeSessions": true
+  "autoResumeSessions": true,
+  "toolThreadMode": "turn"
 }
 ```
 
 `maxSessionsPerUser`(기본 10)는 한 사용자가 동시에 띄울 수 있는 세션 수입니다(시작·재개·fork 공통). 세션을 시작할 때마다 다시 읽으므로 봇을 재시작하지 않아도 됩니다.
 
 `autoResumeSessions`(기본 true)는 봇이 다시 켜질 때 `A4D - Sessions` 의 세션 채널을 자동으로 이어받을지입니다. 결과는 각 채널에 한 줄로 남습니다.
+
+`toolThreadMode`(기본 `turn`)는 새 세션의 도구 스레드 모드입니다. `/a4d threads` 로 세션별로 바꾸며 재개 후에도 유지됩니다. 비공개 폴링 스레드에는 봇의 **비공개 스레드 만들기** 권한이 필요하고, 없으면 폴링 호출도 턴 스레드로 갑니다.
 
 ## 개발
 

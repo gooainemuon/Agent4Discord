@@ -20,6 +20,7 @@ import { checkForUpdates } from './utils/updateCheck.js';
 import { setupAutoArchive } from './sessions/autoArchive.js';
 import { setupLifecycle } from './sessions/lifecycle.js';
 import { prepareSessionMessage } from './sessions/handoff.js';
+import { forgetChannelThreads } from './sessions/toolThreads.js';
 import { setupModelCatalog } from './sessions/modelCatalog.js';
 import { handleModelAutocomplete } from './commands/model.js';
 
@@ -213,6 +214,7 @@ export async function startBot(): Promise<void> {
     sessionManager.removeSession(channel.id);
     removeSessionFromGuild(session.guildId, channel.id);
     clearAlwaysAllowed(channel.id);
+    forgetChannelThreads(channel.id);
   });
 
   // Wire up SDK event -> Discord message handlers

@@ -32,7 +32,7 @@ Agent4Discord (A4D) is a self-hosted Discord bot that lets you interact with [Cl
 - **Directory Browser** — Navigate your filesystem with select menus, buttons, and create directories
 - **Model & Permission Mode** — Choose opus/sonnet/haiku and permission level (default, auto-accept edits, full auto) when starting a session
 - **Real-time Streaming** — Live-updating embeds for text output, thinking, and tool progress
-- **Tool Call Threads** — Each tool execution gets its own thread with formatted input/output
+- **Tool Call Threads** — Tool calls go to one thread per turn, attached to a short `🔧 Bash ×5 · Read` anchor message (no "started a thread" lines in the channel). `/a4d threads each` gives every call its own thread, `off` hides them. Inbox-polling calls (read-only tools mentioning `inbox`, or Bash `sleep`) go to a private `🔁 polling` thread instead
 - **Permission Control** — Allow/Always Allow/Deny buttons only for risky calls (deletes, force push, installs, killing processes, secrets, unknown tools); everything else runs without asking
 - **File Attachments** — Send files to Claude via Discord attachments, Claude can send files back
 - **Completion Notification** — @mentions you when Claude finishes responding
@@ -94,6 +94,7 @@ npx agent4discord@latest
 | `/a4d close` | Stop the session and delete the channel |
 | `/a4d handoff [dir] [name]` | Create `YYYY-MM-DD-hhmm-<session name>/` and ask Claude to write the handoff note, inbox and work log |
 | `/a4d clear` | Start a fresh session in this channel (same folder, model and permissions, no history) |
+| `/a4d threads <turn\|each\|off>` | How tool calls are shown: one thread per turn (default), one per call, or hidden |
 
 ## Channel Structure
 
@@ -120,13 +121,16 @@ Config is stored at `~/.agent4discord/config.json`:
   "permissionMode": "default",
   "logLevel": "info",
   "maxSessionsPerUser": 10,
-  "autoResumeSessions": true
+  "autoResumeSessions": true,
+  "toolThreadMode": "turn"
 }
 ```
 
 `maxSessionsPerUser` (default 10) caps how many sessions one user can run at once (start, resume and fork). It is re-read on every session start, so no restart is needed.
 
 `autoResumeSessions` (default true) resumes the session channels under `A4D - Sessions` when the bot starts again. Each channel gets a one-line notice of the outcome.
+
+`toolThreadMode` (default `turn`) is the tool-thread mode new sessions start with; `/a4d threads` changes it per session and the choice survives a resume. The private polling thread needs the bot's **Create Private Threads** permission; without it polling calls fall back to the turn thread.
 
 ## Development
 
@@ -158,7 +162,8 @@ src/
 │   ├── model.ts              # /a4d model
 │   ├── close.ts              # /a4d close
 │   ├── handoff.ts            # /a4d handoff
-│   └── clear.ts              # /a4d clear
+│   ├── clear.ts              # /a4d clear
+│   └── threads.ts            # /a4d threads
 ├── interactions/
 │   ├── index.ts              # Interaction router
 │   ├── directoryBrowser.ts   # Directory browser UI

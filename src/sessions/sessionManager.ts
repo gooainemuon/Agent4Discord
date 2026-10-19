@@ -20,6 +20,7 @@ import { getClaudeExecutable } from '../utils/claudeCli.js';
 import { createDiscordToolServer, getUploadLimit } from '../tools/discordTools.js';
 import { sessionContextOptions } from './sessionContext.js';
 import { attachRefusal } from '../utils/attachPolicy.js';
+import type { ThreadMode } from '../config.js';
 
 export type SessionState = 'idle' | 'running' | 'stopped' | 'archived';
 
@@ -36,6 +37,8 @@ export interface ActiveSession {
   effort?: EffortLevel;
   /** Lane name from "너는 <세션명>" (see sessions/handoff.ts); undefined until the user names it. */
   sessionName?: string;
+  /** Where this session's tool calls are shown (see sessions/toolThreads.ts); undefined = config default. */
+  threadMode?: ThreadMode;
   totalCostUsd: number;
   createdAt: string;
   resolveNext: ((msg: SDKUserMessage) => void) | null;

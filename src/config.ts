@@ -2,6 +2,15 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
 
+/** Where tool calls are shown: one thread per turn, one per tool call, or not at all. */
+export type ThreadMode = 'off' | 'turn' | 'each';
+export const THREAD_MODES: readonly ThreadMode[] = ['off', 'turn', 'each'];
+export const DEFAULT_THREAD_MODE: ThreadMode = 'turn';
+
+export function isThreadMode(value: unknown): value is ThreadMode {
+  return typeof value === 'string' && (THREAD_MODES as readonly string[]).includes(value);
+}
+
 export interface AppConfig {
   discordToken: string;
   discordClientId: string;
@@ -14,6 +23,8 @@ export interface AppConfig {
   maxSessionsPerUser: number;
   /** Resume the session channels that were active when the bot starts again. */
   autoResumeSessions: boolean;
+  /** Default tool-thread mode for new sessions; `/a4d threads` changes it per session. */
+  toolThreadMode: ThreadMode;
 }
 
 export const CONFIG_DIR: string = path.join(os.homedir(), '.agent4discord');
@@ -62,6 +73,7 @@ export function loadConfig(): AppConfig {
       ? (obj['maxSessionsPerUser'] as number)
       : (DEFAULTS.maxSessionsPerUser as number),
     autoResumeSessions: typeof obj['autoResumeSessions'] === 'boolean' ? obj['autoResumeSessions'] : true,
+    toolThreadMode: isThreadMode(obj['toolThreadMode']) ? obj['toolThreadMode'] : DEFAULT_THREAD_MODE,
   };
 }
 

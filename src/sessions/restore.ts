@@ -75,6 +75,7 @@ async function restoreUnlocked(
   const effort = stored?.effort ?? live?.effort;
   const permissionMode = stored?.permissionMode ?? live?.permissionMode;
   const sessionName = stored?.sessionName ?? live?.sessionName;
+  const threadMode = stored?.threadMode ?? live?.threadMode;
   if (live && live.state !== 'stopped' && live.state !== 'archived') {
     return { ok: false, reason: 'This session is already active.' };
   }
@@ -103,7 +104,8 @@ async function restoreUnlocked(
     effort,
   );
   session.sessionName = sessionName;
-  saveSessionToGuild(guildId, channel.id, sessionId, cwd, userId, effort, permissionMode, sessionName);
+  session.threadMode = threadMode;
+  saveSessionToGuild(guildId, channel.id, sessionId, cwd, userId, effort, permissionMode, sessionName, threadMode);
 
   // Best-effort: the session is already running, so a failed edit must not report a failed resume.
   await statusMsg

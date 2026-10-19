@@ -5,6 +5,7 @@ import { input, confirm } from '@inquirer/prompts';
 import open from 'open';
 import {
   type AppConfig,
+  DEFAULT_THREAD_MODE,
   configExists,
   loadConfig,
   saveConfig,
@@ -140,6 +141,7 @@ export async function runSetup(): Promise<void> {
     logLevel: 'info',
     maxSessionsPerUser: 10,
     autoResumeSessions: true,
+    toolThreadMode: DEFAULT_THREAD_MODE,
   };
 
   saveConfig(config);

@@ -16,6 +16,8 @@ import { handlePermission as handlePermissionCmd } from './permission.js';
 import { handleFork } from './fork.js';
 import { handleHandoff } from './handoff.js';
 import { handleClear } from './clear.js';
+import { handleThreads } from './threads.js';
+import { THREAD_MODES } from '../config.js';
 
 /** Handler function type for slash commands. */
 export type CommandHandler = (interaction: ChatInputCommandInteraction) => Promise<void>;
@@ -97,6 +99,16 @@ const a4dCommand = new SlashCommandBuilder()
   )
   .addSubcommand((sub) =>
     sub.setName('clear').setDescription('Start a fresh session in this channel (same folder, no history)')
+  )
+  .addSubcommand((sub) =>
+    sub.setName('threads')
+      .setDescription('How tool calls are shown: one thread per turn, per call, or hidden')
+      .addStringOption((opt) =>
+        opt.setName('mode')
+          .setDescription('turn = one thread per turn (default), each = per tool call, off = hidden')
+          .setRequired(true)
+          .addChoices(...THREAD_MODES.map((m) => ({ name: m, value: m })))
+      )
   );
 
 /** Map of command names to their handler functions. */
@@ -130,6 +142,8 @@ commands.set('a4d', async (interaction: ChatInputCommandInteraction) => {
     await handleHandoff(interaction);
   } else if (subcommand === 'clear') {
     await handleClear(interaction);
+  } else if (subcommand === 'threads') {
+    await handleThreads(interaction);
   }
 });
 

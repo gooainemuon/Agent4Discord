@@ -8,6 +8,7 @@ import { createPermissionCallback } from '../interactions/permissionHandler.js';
 import { buildStatusEmbed, COLORS } from '../formatters/embedBuilder.js';
 import { displayPath } from '../interactions/directoryBrowser.js';
 import { loadConfig } from '../config.js';
+import { endTurn } from '../sessions/toolThreads.js';
 
 /**
  * Handle `/a4d clear` -- drop the conversation and start a fresh Claude session in this channel:
@@ -40,6 +41,7 @@ export async function handleClear(interaction: ChatInputCommandInteraction): Pro
 
   if (wasLive) sessionManager.stopSession(channel.id);
   stopTyping(channel.id);
+  endTurn(channel.id);
 
   const fresh = sessionManager.createSession(
     guild.id,
@@ -52,9 +54,10 @@ export async function handleClear(interaction: ChatInputCommandInteraction): Pro
     session.permissionMode,
     session.effort,
   );
+  fresh.threadMode = session.threadMode;
   // The new id arrives with the init message and is persisted then. No session name: the next
   // "너는 <세션명>" message runs the start procedure.
-  saveSessionToGuild(guild.id, channel.id, '', session.cwd, session.userId, session.effort, session.permissionMode);
+  saveSessionToGuild(guild.id, channel.id, '', session.cwd, session.userId, session.effort, session.permissionMode, undefined, session.threadMode);
 
   if (statusMsg) {
     await statusMsg
