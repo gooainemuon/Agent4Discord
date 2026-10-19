@@ -15,6 +15,8 @@ export interface GuildConfig {
   initializedAt: string;
   initializedBy: string;
   activeSessions: Record<string, SessionEntry>;
+  /** Where /a4d handoff puts handoff folders, per session directory. Absent = the directory itself. */
+  handoffRoots?: Record<string, string>;
 }
 
 export interface SessionEntry {
@@ -26,6 +28,8 @@ export interface SessionEntry {
   effort?: EffortLevel;
   /** Permission mode picked at start or with /a4d permission; reapplied on resume. */
   permissionMode?: PermissionMode;
+  /** Lane name set with "너는 <세션명>"; kept across resume so the start procedure runs only once. */
+  sessionName?: string;
 }
 
 const GUILDS_DIR = path.join(CONFIG_DIR, 'guilds');

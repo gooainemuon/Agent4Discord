@@ -12,7 +12,7 @@ export type RestoreResult =
   | { ok: true; sessionId: string; cwd: string; effort?: string }
   | { ok: false; reason: string };
 
-async function findStatusMessage(channel: TextChannel, botId: string | undefined): Promise<Message | null> {
+export async function findStatusMessage(channel: TextChannel, botId: string | undefined): Promise<Message | null> {
   const isStatus = (m: Message) =>
     m.author.id === botId && m.embeds.length > 0 && m.embeds[0].fields.some((f) => f.name === 'Session ID');
   const pinned = await channel.messages.fetchPins();
@@ -74,6 +74,7 @@ async function restoreUnlocked(
   // Stop and Archive delete the stored entry, so fall back to the stopped session still in memory.
   const effort = stored?.effort ?? live?.effort;
   const permissionMode = stored?.permissionMode ?? live?.permissionMode;
+  const sessionName = stored?.sessionName ?? live?.sessionName;
   if (live && live.state !== 'stopped' && live.state !== 'archived') {
     return { ok: false, reason: 'This session is already active.' };
   }
@@ -101,7 +102,8 @@ async function restoreUnlocked(
     false, // forkSession
     effort,
   );
-  saveSessionToGuild(guildId, channel.id, sessionId, cwd, userId, effort, permissionMode);
+  session.sessionName = sessionName;
+  saveSessionToGuild(guildId, channel.id, sessionId, cwd, userId, effort, permissionMode, sessionName);
 
   // Best-effort: the session is already running, so a failed edit must not report a failed resume.
   await statusMsg

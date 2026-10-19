@@ -14,6 +14,7 @@ export function saveSessionToGuild(
   userId: string,
   effort?: EffortLevel,
   permissionMode?: PermissionMode,
+  sessionName?: string,
 ): void {
   const config = loadGuildConfig(guildId);
   if (!config) {
@@ -27,6 +28,7 @@ export function saveSessionToGuild(
     userId,
     ...(effort && { effort }),
     ...(permissionMode && permissionMode !== 'default' && { permissionMode }),
+    ...(sessionName && { sessionName }),
   };
 
   saveGuildConfig(config);
@@ -57,6 +59,30 @@ export function updateSessionPermissionInGuild(guildId: string, channelId: strin
   if (!config || !entry || entry.permissionMode === mode) return;
   entry.permissionMode = mode;
   saveGuildConfig(config);
+}
+
+/** Remember the lane name of a channel so a resume after a restart does not run the start procedure again. */
+export function updateSessionNameInGuild(guildId: string, channelId: string, sessionName: string): void {
+  const config = loadGuildConfig(guildId);
+  const entry = config?.activeSessions[channelId];
+  if (!config || !entry || entry.sessionName === sessionName) return;
+  entry.sessionName = sessionName;
+  saveGuildConfig(config);
+}
+
+/** Remember where /a4d handoff puts handoff folders for sessions in `cwd`. */
+export function rememberHandoffRoot(guildId: string, cwd: string, root: string): void {
+  const config = loadGuildConfig(guildId);
+  if (!config) return;
+  if (config.handoffRoots?.[cwd] === root) return;
+  config.handoffRoots = { ...config.handoffRoots, [cwd]: root };
+  saveGuildConfig(config);
+}
+
+/** The remembered handoff root for `cwd`, as a list (empty when none was ever given). */
+export function knownHandoffRoots(guildId: string, cwd: string): string[] {
+  const root = loadGuildConfig(guildId)?.handoffRoots?.[cwd];
+  return root ? [root] : [];
 }
 
 export function removeSessionFromGuild(

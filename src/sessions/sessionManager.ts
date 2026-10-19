@@ -34,6 +34,8 @@ export interface ActiveSession {
   permissionMode: PermissionMode;
   /** Effort set for this session (picker, /a4d effort or restored); undefined = settings.json. */
   effort?: EffortLevel;
+  /** Lane name from "너는 <세션명>" (see sessions/handoff.ts); undefined until the user names it. */
+  sessionName?: string;
   totalCostUsd: number;
   createdAt: string;
   resolveNext: ((msg: SDKUserMessage) => void) | null;

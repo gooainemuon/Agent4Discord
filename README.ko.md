@@ -38,6 +38,7 @@ Agent4Discord (A4D)는 [Claude Code](https://docs.anthropic.com/en/docs/claude-c
 - **완료 알림** — Claude 응답 완료 시 @mention으로 알림
 - **세션 재개** — CLI에서 만든 세션이나 중단된 세션을 `/a4d resume`으로 재개
 - **재개 지시** — 봇이 다시 켜지면 세션을 자동으로 이어받고, 세션 디렉토리에 `.claude/a4d-on-resume.md`가 있으면 그 내용을 세션에 보냄 (예: 백그라운드 감시 다시 켜기)
+- **세션 레인 & 인계** — 세션을 `너는 <세션명>` 으로 시작하면 그 이름이 붙음. `/a4d handoff` 는 `YYYY-MM-DD-hhmm-<세션명>/` 폴더(기본: 세션 디렉토리, `dir` 옵션으로 변경)를 만들고 Claude 가 `HANDOFF.md`(인계 노트), `INBOX.md`(인박스), `WORKLOG.md`(작업 로그)를 쓰게 함. `/a4d clear` 로 같은 채널에서 새 세션을 열고, 새 세션이 `너는 <세션명>` 으로 시작하면 그 이름의 최신 인계 폴더를 읽고 보고한 뒤 이어감
 - **사용량 트래커** — `#a4d-usage` 채널에서 세션 비용, 토큰, 속도 제한 표시
 - **플러그인 지원** — 설치된 Claude Code 플러그인 (스킬, 훅) 자동 로드
 - **CLI 연동** — CLI와 동일한 JSONL 저장소를 공유하여 세션 호환
@@ -91,6 +92,8 @@ npx agent4discord@latest
 | `/a4d resume` | 현재 채널에서 중단된 세션 재개 |
 | `/a4d model <opus\|sonnet\|haiku>` | 세션 중 모델 변경 |
 | `/a4d close` | 세션 종료 및 채널 삭제 |
+| `/a4d handoff [dir] [name]` | `YYYY-MM-DD-hhmm-<세션명>/` 폴더를 만들고 Claude 에게 인계 노트·인박스·작업 로그 작성을 요청 |
+| `/a4d clear` | 이 채널에서 새 세션 시작 (같은 폴더·모델·권한, 대화 기록 없음) |
 
 ## 채널 구조
 

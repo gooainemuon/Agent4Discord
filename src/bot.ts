@@ -19,6 +19,7 @@ import type { ContentBlockParam } from '@anthropic-ai/sdk/resources';
 import { checkForUpdates } from './utils/updateCheck.js';
 import { setupAutoArchive } from './sessions/autoArchive.js';
 import { setupLifecycle } from './sessions/lifecycle.js';
+import { prepareSessionMessage } from './sessions/handoff.js';
 import { setupModelCatalog } from './sessions/modelCatalog.js';
 import { handleModelAutocomplete } from './commands/model.js';
 
@@ -162,6 +163,10 @@ export async function startBot(): Promise<void> {
     startTyping(message.channel as import('discord.js').TextChannel);
 
     try {
+      // "너는 <세션명>" on an unnamed session names it and prepends the handoff start procedure.
+      const { content, notice } = prepareSessionMessage(session, message.content);
+      if (notice) await message.channel.send(notice).catch(() => {});
+
       // Process attachments if present
       if (message.attachments.size > 0) {
         const attachmentResults = await processAttachments(message.attachments, session.cwd);
@@ -169,8 +174,8 @@ export async function startBot(): Promise<void> {
         if (attachmentResults.length > 0) {
           const contentBlocks: ContentBlockParam[] = [];
 
-          if (message.content) {
-            contentBlocks.push({ type: 'text', text: message.content });
+          if (content) {
+            contentBlocks.push({ type: 'text', text: content });
           }
 
           for (const result of attachmentResults) {
@@ -185,10 +190,10 @@ export async function startBot(): Promise<void> {
           sessionManager.sendMessage(message.channelId, contentBlocks);
         } else {
           // All attachments failed to process — send text only
-          sessionManager.sendMessage(message.channelId, message.content || 'User sent attachments that could not be processed.');
+          sessionManager.sendMessage(message.channelId, content || 'User sent attachments that could not be processed.');
         }
       } else {
-        sessionManager.sendMessage(message.channelId, message.content);
+        sessionManager.sendMessage(message.channelId, content);
       }
     } catch (err) {
       console.error(`[message] Failed to relay message to session:`, err);

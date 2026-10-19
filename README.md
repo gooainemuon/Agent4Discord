@@ -38,6 +38,7 @@ Agent4Discord (A4D) is a self-hosted Discord bot that lets you interact with [Cl
 - **Completion Notification** — @mentions you when Claude finishes responding
 - **Session Resume** — Resume CLI-created sessions or stopped sessions with `/a4d resume`
 - **Resume Instructions** — After a bot restart, sessions resume on their own; if the session directory has `.claude/a4d-on-resume.md`, its text is sent to the session (e.g. to restart a background watch)
+- **Session Lanes & Handoff** — Start a session with `너는 <session name>` to name it. `/a4d handoff` makes `YYYY-MM-DD-hhmm-<session name>/` (in the session directory unless `dir` is given) and has Claude write `HANDOFF.md`, `INBOX.md` and `WORKLOG.md` there. `/a4d clear` starts a fresh session in the same channel; a new session that opens with `너는 <session name>` reads the newest folder of that name and reports before continuing
 - **Usage Tracker** — `#a4d-usage` channel shows session costs, tokens, and rate limits
 - **Plugin Support** — Auto-loads your installed Claude Code plugins (skills, hooks)
 - **CLI Interop** — Sessions share the same JSONL storage as the CLI
@@ -91,6 +92,8 @@ npx agent4discord@latest
 | `/a4d resume` | Resume a stopped session in the current channel |
 | `/a4d model <opus\|sonnet\|haiku>` | Change model mid-session |
 | `/a4d close` | Stop the session and delete the channel |
+| `/a4d handoff [dir] [name]` | Create `YYYY-MM-DD-hhmm-<session name>/` and ask Claude to write the handoff note, inbox and work log |
+| `/a4d clear` | Start a fresh session in this channel (same folder, model and permissions, no history) |
 
 ## Channel Structure
 
@@ -153,7 +156,9 @@ src/
 │   ├── init.ts               # /a4d init
 │   ├── resume.ts             # /a4d resume
 │   ├── model.ts              # /a4d model
-│   └── close.ts              # /a4d close
+│   ├── close.ts              # /a4d close
+│   ├── handoff.ts            # /a4d handoff
+│   └── clear.ts              # /a4d clear
 ├── interactions/
 │   ├── index.ts              # Interaction router
 │   ├── directoryBrowser.ts   # Directory browser UI

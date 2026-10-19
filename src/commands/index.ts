@@ -14,6 +14,8 @@ import { handleSh } from './sh.js';
 import { handleBrowser } from './browser.js';
 import { handlePermission as handlePermissionCmd } from './permission.js';
 import { handleFork } from './fork.js';
+import { handleHandoff } from './handoff.js';
+import { handleClear } from './clear.js';
 
 /** Handler function type for slash commands. */
 export type CommandHandler = (interaction: ChatInputCommandInteraction) => Promise<void>;
@@ -78,6 +80,23 @@ const a4dCommand = new SlashCommandBuilder()
   )
   .addSubcommand((sub) =>
     sub.setName('fork').setDescription('Fork this session into a new channel')
+  )
+  .addSubcommand((sub) =>
+    sub.setName('handoff')
+      .setDescription('Write a handoff folder (YYYY-MM-DD-hhmm-<session name>) for the next session')
+      .addStringOption((opt) =>
+        opt.setName('dir')
+          .setDescription('Where to put handoff folders (default: the session directory; remembered)')
+          .setRequired(false)
+      )
+      .addStringOption((opt) =>
+        opt.setName('name')
+          .setDescription('Session name (default: the one set with "너는 <세션명>")')
+          .setRequired(false)
+      )
+  )
+  .addSubcommand((sub) =>
+    sub.setName('clear').setDescription('Start a fresh session in this channel (same folder, no history)')
   );
 
 /** Map of command names to their handler functions. */
@@ -107,6 +126,10 @@ commands.set('a4d', async (interaction: ChatInputCommandInteraction) => {
     await handlePermissionCmd(interaction);
   } else if (subcommand === 'fork') {
     await handleFork(interaction);
+  } else if (subcommand === 'handoff') {
+    await handleHandoff(interaction);
+  } else if (subcommand === 'clear') {
+    await handleClear(interaction);
   }
 });
 
