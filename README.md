@@ -38,7 +38,7 @@ Agent4Discord (A4D) is a self-hosted Discord bot that lets you interact with [Cl
 - **Completion Notification** — @mentions you when Claude finishes responding
 - **Session Resume** — Resume CLI-created sessions or stopped sessions with `/a4d resume`
 - **Resume Instructions** — After a bot restart, sessions resume on their own; if the session directory has `.claude/a4d-on-resume.md`, its text is sent to the session (e.g. to restart a background watch)
-- **Session Lanes & Handoff** — Start a session with `너는 <session name>` to name it. `/a4d handoff` makes `YYYY-MM-DD-hhmm-<session name>/` (in the session directory unless `dir` is given) and has Claude write `HANDOFF.md`, `INBOX.md` and `WORKLOG.md` there. `/a4d clear` starts a fresh session in the same channel; a new session that opens with `너는 <session name>` reads the newest folder of that name and reports before continuing
+- **Session Lanes & Handoff** — Start a session with `너는 <session name>` to name it. `/a4d handoff` makes `YYYY-MM-DD-hhmm-<session name>/` (in the session directory unless `dir` is given) and has Claude write `HANDOFF.md`, `INBOX.md` and `WORKLOG.md` there. `/a4d clear` starts a fresh session in the same channel; a new session that opens with `너는 <session name>` reads the newest folder of that name and reports before continuing. In a project with `.planning/handoff/`, handoffs are single notes there instead (`YYYY-MM-DD-hhmm-<session name>.md`, one new file each time, never edited; the note says where the inbox and work log are)
 - **Inbox Watch** — In a project with `.claude/a4d-inbox.json`, the bot watches the project's inbox folder for each named session and passes new message files addressed to that lane (path and first lines) to the session when it is idle. The watch survives restarts, resume and `/a4d clear`, so Claude needs no watch loop of its own; `/a4d inbox off` turns it off
 - **Usage Tracker** — `#a4d-usage` channel shows session costs, tokens, and rate limits
 - **Plugin Support** — Auto-loads your installed Claude Code plugins (skills, hooks)
@@ -93,7 +93,7 @@ npx agent4discord@latest
 | `/a4d resume` | Resume a stopped session in the current channel |
 | `/a4d model <opus\|sonnet\|haiku>` | Change model mid-session |
 | `/a4d close` | Stop the session and delete the channel |
-| `/a4d handoff [dir] [name]` | Create `YYYY-MM-DD-hhmm-<session name>/` and ask Claude to write the handoff note, inbox and work log |
+| `/a4d handoff [dir] [name]` | Create `YYYY-MM-DD-hhmm-<session name>/` and ask Claude to write the handoff note, inbox and work log (in `.planning/handoff/`: one new note `YYYY-MM-DD-hhmm-<session name>.md`) |
 | `/a4d clear` | Start a fresh session in this channel (same folder, model and permissions, no history) |
 | `/a4d threads <turn\|each\|off>` | How tool calls are shown: one thread per turn (default), one per call, or hidden |
 | `/a4d inbox [on\|off\|status]` | The bot's watch of the project inbox for this lane (on by default; `on` re-reads the rules) |

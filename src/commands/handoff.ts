@@ -12,13 +12,16 @@ import {
   handoffRootsFor,
   isValidSessionName,
   resolveHandoffRoot,
+  usesHandoffNotes,
 } from '../sessions/handoff.js';
 import { displayPath } from '../interactions/directoryBrowser.js';
 import { startInboxWatch } from '../sessions/inboxWatch.js';
 
 /**
- * Handle `/a4d handoff [dir] [name]` -- make `<root>/YYYY-MM-DD-hhmm-<세션명>` and ask the session to
- * write its 인계 노트, 인박스 and 작업 로그 there. `dir` (default: the session directory) is remembered
+ * Handle `/a4d handoff [dir] [name]` -- ask the session to hand over to the next session of its lane.
+ * In a note root (the project's .planning/handoff/) it writes a new `<root>/YYYY-MM-DD-hhmm-<세션명>.md`;
+ * elsewhere the bot makes `<root>/YYYY-MM-DD-hhmm-<세션명>/` for its 인계 노트, 인박스 and 작업 로그.
+ * `dir` (default: .planning/handoff/ if the project has one, else the session directory) is remembered
  * for this directory; `name` sets the session name when the session has none.
  */
 export async function handleHandoff(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -45,14 +48,20 @@ export async function handleHandoff(interaction: ChatInputCommandInteraction): P
 
   const dirOpt = interaction.options.getString('dir')?.trim();
   const root = dirOpt ? resolveHandoffRoot(dirOpt, session.cwd) : handoffRootsFor(guild.id, session.cwd)[0];
-  const folder = path.join(root, handoffFolderName(name));
+  const kind = usesHandoffNotes(root, session.cwd) ? 'note' : 'folder';
+  const target = path.join(root, handoffFolderName(name) + (kind === 'note' ? '.md' : ''));
 
   await interaction.deferReply();
+  if (kind === 'note' && fs.existsSync(target)) {
+    // Notes are never edited once written; a second handoff in the same minute must wait.
+    await interaction.editReply({ content: `이미 같은 이름의 인계 노트가 있습니다: \`${displayPath(target)}\`. 1분 뒤에 다시 실행하세요.` });
+    return;
+  }
   try {
-    fs.mkdirSync(folder, { recursive: true });
+    fs.mkdirSync(kind === 'note' ? root : target, { recursive: true });
   } catch (err) {
     console.error('[handoff] Failed to create handoff folder:', err);
-    await interaction.editReply({ content: `인계 폴더를 만들지 못했습니다: \`${displayPath(folder)}\`` });
+    await interaction.editReply({ content: `인계 폴더를 만들지 못했습니다: \`${displayPath(kind === 'note' ? root : target)}\`` });
     return;
   }
 
@@ -66,11 +75,11 @@ export async function handleHandoff(interaction: ChatInputCommandInteraction): P
     try { rememberHandoffRoot(guild.id, session.cwd, root); } catch (err) { console.error('[handoff] Failed to persist handoff root:', err); }
   }
 
-  const previous = findLatestHandoff(handoffRootsFor(guild.id, session.cwd), name, folder);
+  const previous = findLatestHandoff(handoffRootsFor(guild.id, session.cwd), name, target);
 
   try {
     startTyping(channel);
-    sessionManager.sendMessage(channel.id, buildHandoffPrompt(name, folder, previous));
+    sessionManager.sendMessage(channel.id, buildHandoffPrompt(name, target, previous, kind));
   } catch (err) {
     console.error('[handoff] Failed to send the handoff request:', err);
     await interaction.editReply({ content: '세션에 인계 요청을 보내지 못했습니다. 세션이 살아 있는지 확인하세요.' });
@@ -79,8 +88,8 @@ export async function handleHandoff(interaction: ChatInputCommandInteraction): P
 
   await interaction.editReply({
     content:
-      `📝 **${name}** 인계 요청을 보냈습니다. 폴더: \`${displayPath(folder)}\`` +
-      (previous ? ` (이전: \`${displayPath(previous.dir)}\`)` : '') +
-      `\nClaude 가 인계 노트·인박스·작업 로그를 쓰고 나면 \`/a4d clear\` 로 컨텍스트를 비운 뒤 \`너는 ${name}\` 으로 이어가세요.`,
+      `📝 **${name}** 인계 요청을 보냈습니다. ${kind === 'note' ? '인계 노트' : '폴더'}: \`${displayPath(target)}\`` +
+      (previous ? ` (이전: \`${displayPath(previous.path)}\`)` : '') +
+      `\nClaude 가 ${kind === 'note' ? '인계 노트를' : '인계 노트·인박스·작업 로그를'} 쓰고 나면 \`/a4d clear\` 로 컨텍스트를 비운 뒤 \`너는 ${name}\` 으로 이어가세요.`,
   });
 }

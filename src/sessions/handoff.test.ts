@@ -87,9 +87,26 @@ describe('findLatestHandoff', () => {
     fs.writeFileSync(nodePath.join(proj, '2026-10-21-0000-lane'), 'a file, not a folder');
 
     const found = findLatestHandoff([proj, other, nodePath.join(home, 'missing')], 'lane');
-    expect(found?.dir).toBe(newest);
+    expect(found?.kind).toBe('folder');
+    expect(found?.path).toBe(newest);
     expect(found?.stamp).toBe('2026-10-19-2013');
-    expect(found?.present).toEqual({ note: true, inbox: true, worklog: false });
+    expect(found?.kind === 'folder' && found.present).toEqual({ note: true, inbox: true, worklog: false });
+  });
+
+  it('also finds note files (YYYY-MM-DD-hhmm-<name>.md), newest stamp first', async () => {
+    const { findLatestHandoff } = await load();
+    const root = nodePath.join(proj, '.planning', 'handoff');
+    fs.mkdirSync(root, { recursive: true });
+    fs.writeFileSync(nodePath.join(root, '2026-10-19-1836-증류-데이터셋.md'), '#');
+    const newest = nodePath.join(root, '2026-10-19-2012-증류-데이터셋.md');
+    fs.writeFileSync(newest, '#');
+    fs.writeFileSync(nodePath.join(root, '2026-10-20-0900-증류-총괄.md'), '#');
+    fs.writeFileSync(nodePath.join(root, '2026-10-21-0900-데이터셋.md'), '#'); // another lane name
+    mkHandoff(proj, '2026-10-18-0900-증류-데이터셋');
+
+    expect(findLatestHandoff([root, proj], '증류-데이터셋')).toEqual({ kind: 'note', path: newest, stamp: '2026-10-19-2012' });
+    expect(findLatestHandoff([root], '증류-데이터셋'.normalize('NFD'))?.path).toBe(newest);
+    expect(findLatestHandoff([root], '증류-데이터셋', newest)?.stamp).toBe('2026-10-19-1836');
   });
 
   it('skips the excluded folder and returns null when nothing matches', async () => {
@@ -97,6 +114,25 @@ describe('findLatestHandoff', () => {
     const only = mkHandoff(proj, '2026-10-19-2013-lane');
     expect(findLatestHandoff([proj], 'lane', only)).toBeNull();
     expect(findLatestHandoff([proj], 'nope')).toBeNull();
+  });
+});
+
+describe('handoffRootsFor / usesHandoffNotes', () => {
+  it("puts the project's .planning/handoff/ after a remembered root and before the directory", async () => {
+    writeGuild();
+    const { handoffRootsFor, usesHandoffNotes } = await load();
+    expect(handoffRootsFor(GUILD, proj)).toEqual([proj]);
+    const project = nodePath.join(proj, '.planning', 'handoff');
+    fs.mkdirSync(project, { recursive: true });
+    expect(handoffRootsFor(GUILD, proj)).toEqual([project, proj]);
+    expect(usesHandoffNotes(project, proj)).toBe(true);
+    expect(usesHandoffNotes(proj, proj)).toBe(false);
+
+    const other = nodePath.join(home, 'notes');
+    fs.mkdirSync(other);
+    expect(usesHandoffNotes(other, proj)).toBe(false);
+    fs.writeFileSync(nodePath.join(other, '2026-10-19-2012-lane.md'), '#');
+    expect(usesHandoffNotes(other, proj)).toBe(true);
   });
 });
 
@@ -136,6 +172,21 @@ describe('prepareSessionMessage', () => {
     expect(out.content).toContain(`인계 폴더: ${newest}`);
   });
 
+  it('starts from the newest note in .planning/handoff/', async () => {
+    writeGuild();
+    const { prepareSessionMessage } = await load();
+    const root = nodePath.join(proj, '.planning', 'handoff');
+    fs.mkdirSync(root, { recursive: true });
+    const note = nodePath.join(root, '2026-10-19-2012-증류-데이터셋.md');
+    fs.writeFileSync(note, '#');
+    const out = prepareSessionMessage(session(), '너는 증류-데이터셋');
+    expect(out.notice).toContain(`인계 노트 \`${note}\``);
+    expect(out.content).toContain(`인계 노트: ${note}`);
+    expect(out.content).toContain('받는 쪽이 먼저 읽을 것');
+    expect(out.content).toContain(`## HH:MM 이어받음 (${note})`);
+    expect(out.content).not.toContain('INBOX.md');
+  });
+
   it('starts a new lane when no folder exists and passes other messages through', async () => {
     writeGuild();
     const { prepareSessionMessage } = await load();
@@ -154,11 +205,21 @@ describe('prepareSessionMessage', () => {
 describe('buildHandoffPrompt', () => {
   it('names the folder, the three files and the previous folder', async () => {
     const { buildHandoffPrompt, HANDOFF_FILES } = await load();
-    const prev = { dir: '/p/2026-10-18-0900-lane', stamp: '2026-10-18-0900', present: { note: true, inbox: true, worklog: true } };
+    const prev = { kind: 'folder' as const, path: '/p/2026-10-18-0900-lane', stamp: '2026-10-18-0900', present: { note: true, inbox: true, worklog: true } };
     const text = buildHandoffPrompt('lane', '/p/2026-10-19-2013-lane', prev);
     expect(text).toContain('/p/2026-10-19-2013-lane');
     expect(text).toContain('이전 인계 폴더: /p/2026-10-18-0900-lane');
     for (const f of Object.values(HANDOFF_FILES)) expect(text).toContain(f);
     expect(buildHandoffPrompt('lane', '/p/x', null)).toContain('첫 인계');
+  });
+
+  it('asks for one new note file in note form', async () => {
+    const { buildHandoffPrompt } = await load();
+    const prev = { kind: 'note' as const, path: '/p/.planning/handoff/2026-10-18-0900-lane.md', stamp: '2026-10-18-0900' };
+    const text = buildHandoffPrompt('lane', '/p/.planning/handoff/2026-10-19-2013-lane.md', prev, 'note');
+    expect(text).toContain('인계 노트: /p/.planning/handoff/2026-10-19-2013-lane.md (아직 없다');
+    expect(text).toContain('이전 인계 노트: /p/.planning/handoff/2026-10-18-0900-lane.md');
+    expect(text).toContain('이미 있는 노트는 고치지 않는다');
+    expect(text).not.toContain('INBOX.md');
   });
 });
