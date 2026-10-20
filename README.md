@@ -39,6 +39,7 @@ Agent4Discord (A4D) is a self-hosted Discord bot that lets you interact with [Cl
 - **Session Resume** — Resume CLI-created sessions or stopped sessions with `/a4d resume`
 - **Resume Instructions** — After a bot restart, sessions resume on their own; if the session directory has `.claude/a4d-on-resume.md`, its text is sent to the session (e.g. to restart a background watch)
 - **Session Lanes & Handoff** — Start a session with `너는 <session name>` to name it. `/a4d handoff` makes `YYYY-MM-DD-hhmm-<session name>/` (in the session directory unless `dir` is given) and has Claude write `HANDOFF.md`, `INBOX.md` and `WORKLOG.md` there. `/a4d clear` starts a fresh session in the same channel; a new session that opens with `너는 <session name>` reads the newest folder of that name and reports before continuing
+- **Inbox Watch** — In a project with `.claude/a4d-inbox.json`, the bot watches the project's inbox folder for each named session and passes new message files addressed to that lane (path and first lines) to the session when it is idle. The watch survives restarts, resume and `/a4d clear`, so Claude needs no watch loop of its own; `/a4d inbox off` turns it off
 - **Usage Tracker** — `#a4d-usage` channel shows session costs, tokens, and rate limits
 - **Plugin Support** — Auto-loads your installed Claude Code plugins (skills, hooks)
 - **CLI Interop** — Sessions share the same JSONL storage as the CLI
@@ -95,6 +96,7 @@ npx agent4discord@latest
 | `/a4d handoff [dir] [name]` | Create `YYYY-MM-DD-hhmm-<session name>/` and ask Claude to write the handoff note, inbox and work log |
 | `/a4d clear` | Start a fresh session in this channel (same folder, model and permissions, no history) |
 | `/a4d threads <turn\|each\|off>` | How tool calls are shown: one thread per turn (default), one per call, or hidden |
+| `/a4d inbox [on\|off\|status]` | The bot's watch of the project inbox for this lane (on by default; `on` re-reads the rules) |
 
 ## Channel Structure
 
@@ -132,6 +134,23 @@ Config is stored at `~/.agent4discord/config.json`:
 
 `toolThreadMode` (default `turn`) is the tool-thread mode new sessions start with; `/a4d threads` changes it per session and the choice survives a resume. The private polling thread needs the bot's **Create Private Threads** permission; without it polling calls fall back to the turn thread.
 
+### Inbox rules (per project)
+
+Projects that keep one message per file in an inbox folder put their routing rules in `<project>/.claude/a4d-inbox.json`:
+
+```json
+{
+  "dir": ".planning/inbox",
+  "default": { "include": ["*총괄*{lane}*.md", "*총괄*-전레인-*.md"] },
+  "lanes": {
+    "증류-총괄": { "include": ["*.md"], "exclude": ["*총괄*"] },
+    "증류-데이터셋": { "match": "데이터셋" }
+  }
+}
+```
+
+`dir` is relative to the session directory. `default` applies to every lane; `{lane}` stands for the lane's `match` (default: the session name). A `lanes.<session name>` entry replaces the default `include`/`exclude`. Patterns are file-name globs (`*`, `?`); `README.md` is never a message. Files the session wrote itself are skipped. After changing the file, run `/a4d inbox on` in the session to re-read it. Remove the project's own inbox watch loop from its instructions (CLAUDE.md, `.claude/a4d-on-resume.md`) once the bot watches; the bot also tells the session not to start one.
+
 ## Development
 
 ```bash
@@ -163,7 +182,8 @@ src/
 │   ├── close.ts              # /a4d close
 │   ├── handoff.ts            # /a4d handoff
 │   ├── clear.ts              # /a4d clear
-│   └── threads.ts            # /a4d threads
+│   ├── threads.ts            # /a4d threads
+│   └── inbox.ts              # /a4d inbox
 ├── interactions/
 │   ├── index.ts              # Interaction router
 │   ├── directoryBrowser.ts   # Directory browser UI
@@ -172,6 +192,8 @@ src/
 │   ├── sessionManager.ts     # SDK query() lifecycle
 │   ├── sessionStore.ts       # Session persistence
 │   ├── eventHandler.ts       # SDK events → Discord
+│   ├── inboxConfig.ts        # .claude/a4d-inbox.json lane rules
+│   ├── inboxWatch.ts         # Project inbox → session
 │   ├── streamHandler.ts      # Streaming text/thinking embeds
 │   ├── toolProgress.ts       # Tool execution progress
 │   └── usageTracker.ts       # Rate limit & cost tracking

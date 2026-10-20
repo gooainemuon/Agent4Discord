@@ -32,6 +32,17 @@ export interface SessionEntry {
   sessionName?: string;
   /** Tool-thread mode picked with /a4d threads; absent = config.json default. */
   threadMode?: ThreadMode;
+  /** false after /a4d inbox off; absent = the bot watches the lane inbox. Kept across /a4d clear. */
+  inboxWatch?: false;
+  /** How far the lane's inbox has been passed on to the session; a resume picks up from here. */
+  inboxCursor?: InboxCursor;
+}
+
+export interface InboxCursor {
+  /** The inbox folder the cursor belongs to. */
+  dir: string;
+  /** Epoch ms up to which matching files have been passed on; newer ones count as new after a restart. */
+  since: number;
 }
 
 const GUILDS_DIR = path.join(CONFIG_DIR, 'guilds');

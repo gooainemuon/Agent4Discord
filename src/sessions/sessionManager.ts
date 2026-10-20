@@ -39,6 +39,8 @@ export interface ActiveSession {
   sessionName?: string;
   /** Where this session's tool calls are shown (see sessions/toolThreads.ts); undefined = config default. */
   threadMode?: ThreadMode;
+  /** false after /a4d inbox off; otherwise a named session's lane inbox is watched (see sessions/inboxWatch.ts). */
+  inboxWatch?: boolean;
   totalCostUsd: number;
   createdAt: string;
   resolveNext: ((msg: SDKUserMessage) => void) | null;

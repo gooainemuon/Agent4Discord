@@ -14,6 +14,7 @@ import {
   resolveHandoffRoot,
 } from '../sessions/handoff.js';
 import { displayPath } from '../interactions/directoryBrowser.js';
+import { startInboxWatch } from '../sessions/inboxWatch.js';
 
 /**
  * Handle `/a4d handoff [dir] [name]` -- make `<root>/YYYY-MM-DD-hhmm-<세션명>` and ask the session to
@@ -59,6 +60,7 @@ export async function handleHandoff(interaction: ChatInputCommandInteraction): P
   if (nameOpt && session.sessionName !== nameOpt) {
     session.sessionName = nameOpt;
     try { updateSessionNameInGuild(guild.id, channel.id, nameOpt); } catch (err) { console.error('[handoff] Failed to persist session name:', err); }
+    startInboxWatch(session); // the lane's inbox rule follows the name
   }
   if (dirOpt) {
     try { rememberHandoffRoot(guild.id, session.cwd, root); } catch (err) { console.error('[handoff] Failed to persist handoff root:', err); }

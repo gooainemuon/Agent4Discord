@@ -5,11 +5,12 @@ import path from 'node:path';
 import type { Client, Message, TextChannel } from 'discord.js';
 import { sessionManager } from './sessionManager.js';
 import { getSessionsForGuild, saveSessionToGuild } from './sessionStore.js';
+import { inboxWatchNote, startInboxWatch } from './inboxWatch.js';
 import { buildStatusEmbed, COLORS } from '../formatters/embedBuilder.js';
 import { createPermissionCallback } from '../interactions/permissionHandler.js';
 
 export type RestoreResult =
-  | { ok: true; sessionId: string; cwd: string; effort?: string }
+  | { ok: true; sessionId: string; cwd: string; effort?: string; inboxDir?: string }
   | { ok: false; reason: string };
 
 export async function findStatusMessage(channel: TextChannel, botId: string | undefined): Promise<Message | null> {
@@ -76,6 +77,7 @@ async function restoreUnlocked(
   const permissionMode = stored?.permissionMode ?? live?.permissionMode;
   const sessionName = stored?.sessionName ?? live?.sessionName;
   const threadMode = stored?.threadMode ?? live?.threadMode;
+  const inboxWatch = stored ? stored.inboxWatch !== false : live?.inboxWatch;
   if (live && live.state !== 'stopped' && live.state !== 'archived') {
     return { ok: false, reason: 'This session is already active.' };
   }
@@ -105,7 +107,10 @@ async function restoreUnlocked(
   );
   session.sessionName = sessionName;
   session.threadMode = threadMode;
+  session.inboxWatch = inboxWatch;
   saveSessionToGuild(guildId, channel.id, sessionId, cwd, userId, effort, permissionMode, sessionName, threadMode);
+  // Picks up from the stored cursor, so files that arrived while the bot was down are passed on.
+  const watch = startInboxWatch(session);
 
   // Best-effort: the session is already running, so a failed edit must not report a failed resume.
   await statusMsg
@@ -125,7 +130,7 @@ async function restoreUnlocked(
     })
     .catch((err) => console.warn('[restore] Failed to update status embed:', err));
 
-  return { ok: true, sessionId, cwd, effort };
+  return { ok: true, sessionId, cwd, effort, ...(watch.ok && { inboxDir: watch.dir }) };
 }
 
 /**
@@ -167,11 +172,15 @@ export async function autoResumeSessions(
       try {
         const result = await restoreChannelSession(channel, guildId, entry.userId, client);
         console.log(`[auto-resume] ${channelId}: ${result.ok ? `resumed ${result.sessionId}` : result.reason}`);
-        const prompt = result.ok ? readResumePrompt(result.cwd) : null;
+        const resumePrompt = result.ok ? readResumePrompt(result.cwd) : null;
+        // The project's resume instructions may say to restart an inbox watch loop the bot now runs.
+        const prompt =
+          result.ok && result.inboxDir && resumePrompt ? `${inboxWatchNote(result.inboxDir)}\n\n${resumePrompt}` : resumePrompt;
         await channel.send(
           result.ok
             ? `🔄 봇이 다시 켜져서 이 세션을 자동으로 이어받았습니다(effort: ${result.effort ?? 'settings.json'}). ` +
-              (prompt ? `\`${RESUME_PROMPT_FILE}\` 의 재개 지시를 보냈습니다.` : '하던 일이 있으면 이어서 시켜 주세요.')
+              (prompt ? `\`${RESUME_PROMPT_FILE}\` 의 재개 지시를 보냈습니다.` : '하던 일이 있으면 이어서 시켜 주세요.') +
+              (result.inboxDir ? `\n📬 인박스 감시 중: \`${result.inboxDir}\`` : '')
             : `⚠️ 자동 복구를 건너뛰었습니다: ${result.reason}`,
         );
         if (prompt) {

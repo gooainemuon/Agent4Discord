@@ -17,6 +17,7 @@ import { handleFork } from './fork.js';
 import { handleHandoff } from './handoff.js';
 import { handleClear } from './clear.js';
 import { handleThreads } from './threads.js';
+import { INBOX_ACTIONS, handleInbox } from './inbox.js';
 import { THREAD_MODES } from '../config.js';
 
 /** Handler function type for slash commands. */
@@ -109,6 +110,16 @@ const a4dCommand = new SlashCommandBuilder()
           .setRequired(true)
           .addChoices(...THREAD_MODES.map((m) => ({ name: m, value: m })))
       )
+  )
+  .addSubcommand((sub) =>
+    sub.setName('inbox')
+      .setDescription('Watch of the project inbox for this lane (.claude/a4d-inbox.json): on by default')
+      .addStringOption((opt) =>
+        opt.setName('action')
+          .setDescription('on, off, or status (default)')
+          .setRequired(false)
+          .addChoices(...INBOX_ACTIONS.map((a) => ({ name: a, value: a })))
+      )
   );
 
 /** Map of command names to their handler functions. */
@@ -144,6 +155,8 @@ commands.set('a4d', async (interaction: ChatInputCommandInteraction) => {
     await handleClear(interaction);
   } else if (subcommand === 'threads') {
     await handleThreads(interaction);
+  } else if (subcommand === 'inbox') {
+    await handleInbox(interaction);
   }
 });
 

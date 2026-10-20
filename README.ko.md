@@ -39,6 +39,7 @@ Agent4Discord (A4D)는 [Claude Code](https://docs.anthropic.com/en/docs/claude-c
 - **세션 재개** — CLI에서 만든 세션이나 중단된 세션을 `/a4d resume`으로 재개
 - **재개 지시** — 봇이 다시 켜지면 세션을 자동으로 이어받고, 세션 디렉토리에 `.claude/a4d-on-resume.md`가 있으면 그 내용을 세션에 보냄 (예: 백그라운드 감시 다시 켜기)
 - **세션 레인 & 인계** — 세션을 `너는 <세션명>` 으로 시작하면 그 이름이 붙음. `/a4d handoff` 는 `YYYY-MM-DD-hhmm-<세션명>/` 폴더(기본: 세션 디렉토리, `dir` 옵션으로 변경)를 만들고 Claude 가 `HANDOFF.md`(인계 노트), `INBOX.md`(인박스), `WORKLOG.md`(작업 로그)를 쓰게 함. `/a4d clear` 로 같은 채널에서 새 세션을 열고, 새 세션이 `너는 <세션명>` 으로 시작하면 그 이름의 최신 인계 폴더를 읽고 보고한 뒤 이어감
+- **인박스 감시** — 프로젝트에 `.claude/a4d-inbox.json` 이 있으면 봇이 이름 붙은 세션마다 프로젝트 인박스 폴더를 감시하고, 그 레인 앞으로 온 새 메시지 파일(경로와 앞부분)을 세션이 한가할 때 전해 줌. 재시작·재개·`/a4d clear` 뒤에도 이어지므로 Claude 가 감시 루프를 따로 돌릴 필요가 없음. `/a4d inbox off` 로 끔
 - **사용량 트래커** — `#a4d-usage` 채널에서 세션 비용, 토큰, 속도 제한 표시
 - **플러그인 지원** — 설치된 Claude Code 플러그인 (스킬, 훅) 자동 로드
 - **CLI 연동** — CLI와 동일한 JSONL 저장소를 공유하여 세션 호환
@@ -95,6 +96,7 @@ npx agent4discord@latest
 | `/a4d handoff [dir] [name]` | `YYYY-MM-DD-hhmm-<세션명>/` 폴더를 만들고 Claude 에게 인계 노트·인박스·작업 로그 작성을 요청 |
 | `/a4d clear` | 이 채널에서 새 세션 시작 (같은 폴더·모델·권한, 대화 기록 없음) |
 | `/a4d threads <turn\|each\|off>` | 도구 호출 표시 방식: 턴마다 스레드 하나(기본), 호출마다 하나, 숨김 |
+| `/a4d inbox [on\|off\|status]` | 이 레인의 프로젝트 인박스 감시 켜기·끄기·상태 (기본 켜짐, `on` 은 규칙을 다시 읽음) |
 
 ## 채널 구조
 
@@ -131,6 +133,23 @@ A4D - Sessions
 `autoResumeSessions`(기본 true)는 봇이 다시 켜질 때 `A4D - Sessions` 의 세션 채널을 자동으로 이어받을지입니다. 결과는 각 채널에 한 줄로 남습니다.
 
 `toolThreadMode`(기본 `turn`)는 새 세션의 도구 스레드 모드입니다. `/a4d threads` 로 세션별로 바꾸며 재개 후에도 유지됩니다. 비공개 폴링 스레드에는 봇의 **비공개 스레드 만들기** 권한이 필요하고, 없으면 폴링 호출도 턴 스레드로 갑니다.
+
+### 인박스 규칙 (프로젝트별)
+
+인박스 폴더에 메시지를 파일 하나씩 두는 프로젝트는 `<프로젝트>/.claude/a4d-inbox.json` 에 받는 규칙을 적습니다:
+
+```json
+{
+  "dir": ".planning/inbox",
+  "default": { "include": ["*총괄*{lane}*.md", "*총괄*-전레인-*.md"] },
+  "lanes": {
+    "증류-총괄": { "include": ["*.md"], "exclude": ["*총괄*"] },
+    "증류-데이터셋": { "match": "데이터셋" }
+  }
+}
+```
+
+`dir` 은 세션 디렉토리 기준입니다. `default` 는 모든 레인에 쓰이고 `{lane}` 자리에는 레인의 `match`(기본: 세션명)가 들어갑니다. `lanes.<세션명>` 항목의 `include`/`exclude` 가 기본 규칙을 대신합니다. 패턴은 파일명 glob(`*`, `?`)이고 `README.md` 는 메시지로 치지 않습니다. 세션이 직접 쓴 파일은 건너뜁니다. 파일을 고친 뒤에는 그 세션에서 `/a4d inbox on` 으로 다시 읽습니다. 봇이 감시하기 시작하면 프로젝트 지침(CLAUDE.md, `.claude/a4d-on-resume.md`)의 인박스 감시 루프는 지우세요. 봇도 세션에 따로 띄우지 말라고 알립니다.
 
 ## 개발
 

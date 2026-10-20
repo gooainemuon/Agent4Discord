@@ -20,6 +20,7 @@ import { checkForUpdates } from './utils/updateCheck.js';
 import { setupAutoArchive } from './sessions/autoArchive.js';
 import { setupLifecycle } from './sessions/lifecycle.js';
 import { prepareSessionMessage } from './sessions/handoff.js';
+import { inboxWatchNote, setupInboxWatch, startInboxWatch } from './sessions/inboxWatch.js';
 import { forgetChannelThreads } from './sessions/toolThreads.js';
 import { setupModelCatalog } from './sessions/modelCatalog.js';
 import { handleModelAutocomplete } from './commands/model.js';
@@ -165,8 +166,15 @@ export async function startBot(): Promise<void> {
 
     try {
       // "너는 <세션명>" on an unnamed session names it and prepends the handoff start procedure.
-      const { content, notice } = prepareSessionMessage(session, message.content);
-      if (notice) await message.channel.send(notice).catch(() => {});
+      const prepared = prepareSessionMessage(session, message.content);
+      let content = prepared.content;
+      if (prepared.notice) {
+        // A named lane: watch its inbox if the project has inbox rules (.claude/a4d-inbox.json).
+        const watch = startInboxWatch(session);
+        if (watch.ok) content = `${inboxWatchNote(watch.dir)}\n${content}`;
+        const watchLine = watch.ok ? `\n📬 인박스 감시 시작: \`${watch.dir}\`` : '';
+        await message.channel.send(prepared.notice + watchLine).catch(() => {});
+      }
 
       // Process attachments if present
       if (message.attachments.size > 0) {
@@ -219,6 +227,7 @@ export async function startBot(): Promise<void> {
 
   // Wire up SDK event -> Discord message handlers
   setupEventHandlers(client);
+  setupInboxWatch(client);
 
   // Start usage tracker and auto-archive after login so guild cache is populated
   client.once(Events.ClientReady, () => {

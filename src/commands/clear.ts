@@ -55,6 +55,7 @@ export async function handleClear(interaction: ChatInputCommandInteraction): Pro
     session.effort,
   );
   fresh.threadMode = session.threadMode;
+  fresh.inboxWatch = session.inboxWatch; // the watch starts again once the fresh session is named
   // The new id arrives with the init message and is persisted then. No session name: the next
   // "너는 <세션명>" message runs the start procedure.
   saveSessionToGuild(guild.id, channel.id, '', session.cwd, session.userId, session.effort, session.permissionMode, undefined, session.threadMode);

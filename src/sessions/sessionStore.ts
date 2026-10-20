@@ -4,6 +4,7 @@ import type { ThreadMode } from '../config.js';
 import {
   loadGuildConfig,
   saveGuildConfig,
+  type InboxCursor,
   type SessionEntry,
 } from '../guild.js';
 
@@ -23,6 +24,9 @@ export function saveSessionToGuild(
     throw new Error(`Guild config not found for guild ${guildId}`);
   }
 
+  // The inbox switch belongs to the channel; the read position belongs to the lane.
+  const prev = config.activeSessions[channelId];
+  const keepCursor = prev?.inboxCursor && sessionName && prev.sessionName === sessionName;
   config.activeSessions[channelId] = {
     sessionId,
     cwd,
@@ -32,6 +36,8 @@ export function saveSessionToGuild(
     ...(permissionMode && permissionMode !== 'default' && { permissionMode }),
     ...(sessionName && { sessionName }),
     ...(threadMode && { threadMode }),
+    ...(prev?.inboxWatch === false && { inboxWatch: false as const }),
+    ...(keepCursor && { inboxCursor: prev.inboxCursor }),
   };
 
   saveGuildConfig(config);
@@ -79,6 +85,26 @@ export function updateSessionThreadModeInGuild(guildId: string, channelId: strin
   const entry = config?.activeSessions[channelId];
   if (!config || !entry || entry.threadMode === threadMode) return;
   entry.threadMode = threadMode;
+  saveGuildConfig(config);
+}
+
+/** Turn the bot's lane-inbox watch on (the default, stored as absent) or off for a channel. */
+export function updateSessionInboxWatchInGuild(guildId: string, channelId: string, watch: boolean): void {
+  const config = loadGuildConfig(guildId);
+  const entry = config?.activeSessions[channelId];
+  if (!config || !entry || (entry.inboxWatch !== false) === watch) return;
+  if (watch) delete entry.inboxWatch;
+  else entry.inboxWatch = false;
+  saveGuildConfig(config);
+}
+
+/** Remember how far a channel's lane inbox has been passed on. */
+export function updateSessionInboxCursorInGuild(guildId: string, channelId: string, cursor: InboxCursor): void {
+  const config = loadGuildConfig(guildId);
+  const entry = config?.activeSessions[channelId];
+  if (!config || !entry) return;
+  if (entry.inboxCursor?.dir === cursor.dir && entry.inboxCursor.since === cursor.since) return;
+  entry.inboxCursor = cursor;
   saveGuildConfig(config);
 }
 
