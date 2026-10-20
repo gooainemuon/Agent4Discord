@@ -9,6 +9,7 @@
   "files": [
     "dist",
     "a4d.defaults.json",
+    "rules",
     "README.md",
     "README.ko.md"
   ],

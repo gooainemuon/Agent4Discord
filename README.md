@@ -145,6 +145,14 @@ Settings live in two places, so that each device can run its own bot and still b
 
 `toolThreadMode` (default `turn`) is the tool-thread mode new sessions start with; `/a4d threads` changes it per session and the choice survives a resume. The private polling thread needs the bot's **Create Private Threads** permission; without it polling calls fall back to the turn thread.
 
+### Session rules
+
+The bot appends rules to every Discord session's system prompt in this order, skipping missing files:
+
+1. `rules/discord.md` and `rules/handoff.md` in the repository: rules shared by every device (talking in Discord, approvals, start and handover procedures, the handoff note format).
+2. `~/.claude/modes/discord.md`: extra rules for this device only.
+3. `<project>/.claude/modes/discord.md`: the project's own rules.
+
 ### Inbox rules (per project)
 
 Projects that keep one message per file in an inbox folder put their routing rules in `<project>/.claude/a4d-inbox.json`:

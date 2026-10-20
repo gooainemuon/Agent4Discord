@@ -1,7 +1,7 @@
 // Session lanes: a session named with "너는 <세션명>" hands its work over to the next session of the
 // same name, in one of two forms:
 //   note   — `YYYY-MM-DD-hhmm-<세션명>.md`, one new file per handoff (projects with .planning/handoff/,
-//            the convention of ~/.claude/modes/handoff.md: inbox and work log live where the project says)
+//            the convention of rules/handoff.md: inbox and work log live where the project says)
 //   folder — `YYYY-MM-DD-hhmm-<세션명>/` with 인계 노트, 인박스 and 작업 로그 (everywhere else)
 import fs from 'node:fs';
 import os from 'node:os';
@@ -156,7 +156,7 @@ export function buildHandoffPrompt(
       previousLine(previous),
       '',
       `다음 세션이 "너는 ${name}"으로 시작하면 이 노트를 읽고 이어간다. 지금 바로 인계 노트를 작성하라.`,
-      '- 프로젝트의 인계 규칙(CLAUDE.md, ~/.claude/modes/handoff.md 등)이 있으면 그 형식을 따른다. 없으면: ' +
+      "- 프로젝트의 인계 규칙(CLAUDE.md 등)이나 시스템 프롬프트의 '인계 노트' 규칙이 있으면 그 형식을 따른다. 없으면: " +
         '목표 / 한 것 / 남은 것 / 막힌 것·결정 필요 / 주의 / 검증 방법, 그리고 돌고 있는 작업(명령, 호스트, PID 또는 tmux, ' +
         '로그 경로, 상태 확인 명령, 끝나면 할 일), 판정 대기, 받는 쪽이 먼저 읽을 것(인박스, 아침 할 일, 작업로그 경로).',
       '- 새 파일만 만든다. 이미 있는 노트는 고치지 않는다.',
