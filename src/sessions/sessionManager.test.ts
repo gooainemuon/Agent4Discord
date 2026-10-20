@@ -31,3 +31,21 @@ describe('claimSessionId', () => {
     }
   });
 });
+
+describe('event processing', () => {
+  it('keeps a turn running through system messages until its result', async () => {
+    const seen: string[] = [];
+    const session = { channelId: 'chP', guildId: 'g', sessionId: 's-p', state: 'running' } as ActiveSession;
+    // System messages (init, status, hooks, tasks) arrive in the middle of a turn.
+    session.query = (async function* () {
+      yield { type: 'system', subtype: 'init', session_id: 's-p' };
+      seen.push(session.state);
+      yield { type: 'system', subtype: 'status', status: 'compacting' };
+      seen.push(session.state);
+      yield { type: 'result', subtype: 'success', total_cost_usd: 0 };
+      seen.push(session.state);
+    })() as unknown as ActiveSession['query'];
+    await (sessionManager as unknown as { _processEvents(s: ActiveSession): Promise<void> })._processEvents(session);
+    expect(seen).toEqual(['running', 'running', 'idle']);
+  });
+});

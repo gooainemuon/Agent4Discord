@@ -336,7 +336,8 @@ class SessionManager extends EventEmitter {
             if ((sysMsg as any).subtype === 'local_command_output') {
               this.emit('local_command_output', session.channelId, (sysMsg as any).content);
             }
-            session.state = 'idle';
+            // Not the end of a turn: init, status, hook and task messages arrive mid-turn. Only a
+            // result makes the session idle.
             break;
           }
           case 'assistant': {
