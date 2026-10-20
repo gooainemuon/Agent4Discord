@@ -12,7 +12,9 @@ import {
   TMUX_SESSION,
   TMUX_SOCKET,
   botEnv,
+  log,
 } from './settings.mjs';
+import { ensureBuilt } from './build.mjs';
 
 const EXTRA_BIN_DIRS = ['/opt/homebrew/bin', '/usr/local/bin', '/usr/bin', '/bin'];
 
@@ -85,8 +87,26 @@ export function botState(pid) {
   }
 }
 
+/**
+ * Install and build when the sources are newer than dist/ (e.g. after git pull). Runs while the bot is
+ * down: the bot imports some modules lazily, so dist/ must not change under a running bot. A failed
+ * build still starts the previous dist/, loudly, so the bot stays reachable.
+ */
+function prepareBuild(settings) {
+  const { steps, error } = ensureBuilt(REPO_DIR, NODE, botEnv(settings).PATH);
+  if (steps.length) {
+    log(`prepared: ${steps.join(', ')}`);
+    console.log(`시작 전에 ${steps.map((s) => (s === 'install' ? 'npm ci' : '빌드')).join(', ')}를 했어요.`);
+  }
+  if (!error) return;
+  log(`prepare failed: ${error.split('\n')[0]}`);
+  if (!fs.existsSync(BOT_ENTRY)) throw new Error(error);
+  console.warn(`${error}\n\n⚠️ 이전 빌드(dist/)로 시작해요. 고친 뒤 \`a4d-ctl restart\` 하세요.`);
+}
+
 /** Start the bot inside a detached tmux session. Replaces a leftover session (e.g. a crashed pane). */
 export function launchInTmux(settings) {
+  prepareBuild(settings);
   if (!fs.existsSync(BOT_ENTRY)) {
     throw new Error(`빌드 결과물이 없어요: ${BOT_ENTRY}\n  먼저 \`npm run build\`를 실행하세요.`);
   }
