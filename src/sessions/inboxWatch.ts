@@ -86,7 +86,10 @@ export function startInboxWatch(session: ActiveSession): StartResult {
 
   const now = Date.now();
   const stored = getSessionsForGuild(session.guildId)[session.channelId]?.inboxCursor;
-  const since = stored?.dir === rule.dir ? stored.since : now;
+  // No cursor yet (a new lane, or a fresh session after /a4d clear): files since the session started
+  // are news, so a reply that lands before "너는 <세션명>" is not lost.
+  const started = Date.parse(session.createdAt);
+  const since = stored?.dir === rule.dir ? stored.since : Number.isNaN(started) ? now : Math.min(started, now);
   const w: Watch = {
     channelId: session.channelId,
     guildId: session.guildId,

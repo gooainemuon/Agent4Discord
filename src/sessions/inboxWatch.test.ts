@@ -118,6 +118,22 @@ describe('startInboxWatch', () => {
     expect(manager.sent[0]).toContain(TO_ME);
     expect(manager.sent[0]).not.toContain('옛날');
   });
+  it('passes on a matching file that arrived after the session started, when no cursor is stored', async () => {
+    // /a4d clear starts a fresh, unnamed session; a reply that lands before "너는 <세션명>" is still news.
+    writeRules();
+    writeGuild();
+    const started = new Date(Date.now() - 30_000).toISOString();
+    put('2026-10-19-0900-총괄-답-데이터셋-옛날.md');
+    const old = new Date(Date.now() - 60_000);
+    fs.utimesSync(nodePath.join(inbox, '2026-10-19-0900-총괄-답-데이터셋-옛날.md'), old, old);
+    put(TO_ME);
+    const { startInboxWatch, checkInbox, session } = await load({ createdAt: started });
+    startInboxWatch(session);
+    checkInbox('c1'); // settles
+    expect(manager.sent).toHaveLength(1);
+    expect(manager.sent[0]).toContain(TO_ME);
+    expect(manager.sent[0]).not.toContain('옛날');
+  });
 });
 
 describe('checkInbox', () => {
