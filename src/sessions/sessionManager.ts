@@ -159,7 +159,8 @@ class SessionManager extends EventEmitter {
       // New sessions and forks get their id from the init message; a plain resume keeps its id.
       sessionId: resume && !resume.forkSession ? resume.sessionId : '',
       cwd,
-      state: 'running',
+      // Nothing to do until the first message arrives; sendMessage marks it running.
+      state: 'idle',
       permissionMode: permissionMode ?? 'default',
       effort,
       totalCostUsd: 0,
