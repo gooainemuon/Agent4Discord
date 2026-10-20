@@ -113,22 +113,33 @@ A4D - Sessions
 
 ## Configuration
 
-Config is stored at `~/.agent4discord/config.json`:
+Settings live in two places, so that each device can run its own bot and still behave the same way:
+
+- `a4d.defaults.json` in the repository: behaviour shared by every device, kept in sync by git.
+- `~/.agent4discord/config.json`: this device's bot (written by `--setup`). A behaviour setting here overrides the shared value on this device only. The token, client ID and owner IDs are never read from the shared file.
 
 ```json
+// ~/.agent4discord/config.json
 {
   "discordToken": "your-bot-token",
   "discordClientId": "your-client-id",
+  "ownerIds": ["your-discord-user-id"]
+}
+```
+
+```json
+// a4d.defaults.json
+{
   "claudeModel": "opus",
   "permissionMode": "default",
   "logLevel": "info",
-  "maxSessionsPerUser": 10,
+  "maxSessionsPerUser": 100,
   "autoResumeSessions": true,
   "toolThreadMode": "turn"
 }
 ```
 
-`maxSessionsPerUser` (default 10) caps how many sessions one user can run at once (start, resume and fork). It is re-read on every session start, so no restart is needed.
+`maxSessionsPerUser` (built-in default 10) caps how many sessions one user can run at once (start, resume and fork). It is re-read on every session start, so no restart is needed.
 
 `autoResumeSessions` (default true) resumes the session channels under `A4D - Sessions` when the bot starts again. Each channel gets a one-line notice of the outcome.
 

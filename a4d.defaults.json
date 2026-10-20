@@ -1,0 +1,8 @@
+{
+  "claudeModel": "opus",
+  "permissionMode": "default",
+  "logLevel": "info",
+  "maxSessionsPerUser": 100,
+  "autoResumeSessions": true,
+  "toolThreadMode": "turn"
+}

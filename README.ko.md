@@ -113,22 +113,33 @@ A4D - Sessions
 
 ## 설정 파일
 
-`~/.agent4discord/config.json`에 저장됩니다:
+설정은 두 곳에 나뉩니다. 기기마다 봇이 따로 있어도 같은 규칙으로 움직이게 하기 위해서입니다.
+
+- 레포의 `a4d.defaults.json`: 모든 기기가 함께 쓰는 동작 설정입니다. git 으로 같아집니다.
+- `~/.agent4discord/config.json`: 이 기기의 봇(`--setup` 이 씁니다)입니다. 여기에 동작 설정을 적으면 이 기기에서만 공통 값을 덮어씁니다. 토큰·clientId·ownerIds 는 공통 파일에 적어도 읽지 않습니다.
 
 ```json
+// ~/.agent4discord/config.json
 {
   "discordToken": "봇-토큰",
   "discordClientId": "클라이언트-ID",
+  "ownerIds": ["디스코드-사용자-ID"]
+}
+```
+
+```json
+// a4d.defaults.json
+{
   "claudeModel": "opus",
   "permissionMode": "default",
   "logLevel": "info",
-  "maxSessionsPerUser": 10,
+  "maxSessionsPerUser": 100,
   "autoResumeSessions": true,
   "toolThreadMode": "turn"
 }
 ```
 
-`maxSessionsPerUser`(기본 10)는 한 사용자가 동시에 띄울 수 있는 세션 수입니다(시작·재개·fork 공통). 세션을 시작할 때마다 다시 읽으므로 봇을 재시작하지 않아도 됩니다.
+`maxSessionsPerUser`(코드 기본 10)는 한 사용자가 동시에 띄울 수 있는 세션 수입니다(시작·재개·fork 공통). 세션을 시작할 때마다 다시 읽으므로 봇을 재시작하지 않아도 됩니다.
 
 `autoResumeSessions`(기본 true)는 봇이 다시 켜질 때 `A4D - Sessions` 의 세션 채널을 자동으로 이어받을지입니다. 결과는 각 채널에 한 줄로 남습니다.
 

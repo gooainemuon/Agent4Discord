@@ -8,6 +8,7 @@
   },
   "files": [
     "dist",
+    "a4d.defaults.json",
     "README.md",
     "README.ko.md"
   ],

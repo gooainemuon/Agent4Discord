@@ -5,7 +5,7 @@ import { input, confirm } from '@inquirer/prompts';
 import open from 'open';
 import {
   type AppConfig,
-  DEFAULT_THREAD_MODE,
+  type DeviceConfig,
   configExists,
   loadConfig,
   saveConfig,
@@ -133,17 +133,11 @@ export async function runSetup(): Promise<void> {
     validate: (v) => /^\d{15,21}$/.test(v.trim()) || 'Enter a numeric Discord user ID',
   });
 
-  // Save config
-  const config: AppConfig = {
+  // Save this device's bot only; the model, limits and the rest come from a4d.defaults.json in the repo.
+  const config: DeviceConfig = {
     ownerIds: [ownerId.trim()],
     discordToken: discordToken.trim(),
     discordClientId: discordClientId.trim(),
-    claudeModel: 'opus',
-    permissionMode: 'default',
-    logLevel: 'info',
-    maxSessionsPerUser: 10,
-    autoResumeSessions: true,
-    toolThreadMode: DEFAULT_THREAD_MODE,
   };
 
   saveConfig(config);

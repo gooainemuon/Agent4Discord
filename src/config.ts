@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import { fileURLToPath } from 'node:url';
 
 /** Where tool calls are shown: one thread per turn, one per tool call, or not at all. */
 export type ThreadMode = 'off' | 'turn' | 'each';
@@ -29,6 +30,25 @@ export interface AppConfig {
 
 export const CONFIG_DIR: string = path.join(os.homedir(), '.agent4discord');
 export const CONFIG_PATH: string = path.join(CONFIG_DIR, 'config.json');
+/**
+ * How the bot behaves on every device, kept in the repository (one level above src/ and dist/).
+ * config.json holds the device's own bot and may override any of it for that device.
+ */
+export const REPO_DEFAULTS_PATH: string = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', 'a4d.defaults.json');
+
+/** The device's own bot: written by --setup, never taken from the shared defaults. */
+export type DeviceConfig = Pick<AppConfig, 'discordToken' | 'discordClientId' | 'ownerIds'> & Partial<AppConfig>;
+const DEVICE_KEYS = ['discordToken', 'discordClientId', 'ownerIds'];
+
+function readSharedDefaults(file: string): Record<string, unknown> {
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(file, 'utf-8'));
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) return {};
+    return Object.fromEntries(Object.entries(parsed).filter(([k]) => !DEVICE_KEYS.includes(k)));
+  } catch {
+    return {}; // missing or broken: the built-in values
+  }
+}
 
 const DEFAULTS: Partial<AppConfig> = {
   claudeModel: 'opus',
@@ -38,7 +58,7 @@ const DEFAULTS: Partial<AppConfig> = {
   autoResumeSessions: true,
 };
 
-export function loadConfig(): AppConfig {
+export function loadConfig(sharedDefaultsFile: string = REPO_DEFAULTS_PATH): AppConfig {
   if (!fs.existsSync(CONFIG_PATH)) {
     throw new Error(
       `Config file not found at ${CONFIG_PATH}. Run "agent4discord --setup" first.`
@@ -52,7 +72,8 @@ export function loadConfig(): AppConfig {
     throw new Error('Invalid config file: expected a JSON object.');
   }
 
-  const obj = parsed as Record<string, unknown>;
+  // built-in < shared (a4d.defaults.json) < this device's config.json
+  const obj = { ...readSharedDefaults(sharedDefaultsFile), ...(parsed as Record<string, unknown>) };
 
   if (typeof obj['discordToken'] !== 'string' || obj['discordToken'].length === 0) {
     throw new Error('Config missing required field: discordToken');
@@ -77,7 +98,8 @@ export function loadConfig(): AppConfig {
   };
 }
 
-export function saveConfig(config: AppConfig): void {
+/** Write this device's config.json. Behaviour left out here comes from the shared defaults. */
+export function saveConfig(config: DeviceConfig): void {
   if (!fs.existsSync(CONFIG_DIR)) {
     fs.mkdirSync(CONFIG_DIR, { recursive: true });
   }
