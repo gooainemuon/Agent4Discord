@@ -1,7 +1,7 @@
 import { MessageFlags, type ChatInputCommandInteraction } from 'discord.js';
 import { requireSessionChannel } from './sessionChannel.js';
 import { updateSessionInboxWatchInGuild } from '../sessions/sessionStore.js';
-import { INBOX_CONFIG_FILE, loadLaneRule } from '../sessions/inboxConfig.js';
+import { INBOX_CONFIG_FILE, loadLaneRule, type LaneRule, type RosterRoute } from '../sessions/inboxConfig.js';
 import { inboxWatchStatus, startInboxWatch, stopInboxWatch } from '../sessions/inboxWatch.js';
 
 export const INBOX_ACTIONS = ['on', 'off', 'status'] as const;
@@ -43,8 +43,7 @@ export async function handleInbox(interaction: ChatInputCommandInteraction): Pro
   const lines = status
     ? [
         `📬 감시 중: \`${status.rule.dir}\` (레인 **${session.sessionName}**)`,
-        `include: ${status.rule.include.map((g) => `\`${g}\``).join(', ')}`,
-        ...(status.rule.exclude.length ? [`exclude: ${status.rule.exclude.map((g) => `\`${g}\``).join(', ')}`] : []),
+        ...(status.rule.roster ? [rosterLine(status.rule.roster)] : globLines(status.rule)),
         ...(status.waiting.length ? [`전달 대기: ${status.waiting.map((f) => `\`${f}\``).join(', ')}`] : []),
       ]
     : [
@@ -53,6 +52,19 @@ export async function handleInbox(interaction: ChatInputCommandInteraction): Pro
           : `📭 감시하고 있지 않습니다: ${startReason(session)}.`,
       ];
   await interaction.reply({ content: lines.join('\n').slice(0, 1900), flags: MessageFlags.Ephemeral });
+}
+
+function rosterLine({ lane, hub, names, everyone }: RosterRoute): string {
+  const aliases = [...names].filter(([n, l]) => l === lane && n !== lane).map(([n]) => n);
+  const known = aliases.length ? ` 파일명의 ${aliases.map((a) => `\`${a}\``).join(', ')} 도 이 레인입니다.` : '';
+  return lane === hub
+    ? `명부 기준: 총괄 레인이라 다른 레인이 보낸 파일을 모두 받습니다.${known}`
+    : `명부 기준: 파일명에 이 레인이 받는이로 있거나 ${everyone.map((w) => `\`${w}\``).join(', ')} 가 있으면 받습니다.${known}`;
+}
+
+function globLines(rule: LaneRule): string[] {
+  const list = (globs: string[]) => globs.map((g) => `\`${g}\``).join(', ');
+  return [`include: ${list(rule.include)}`, ...(rule.exclude.length ? [`exclude: ${list(rule.exclude)}`] : [])];
 }
 
 /** Why there is no watch, without starting one. */

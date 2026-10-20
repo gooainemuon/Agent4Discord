@@ -180,7 +180,15 @@ A `## 세션` section in the inbox folder's `README.md` is the project's session
 - 증류-데이터셋: 코퍼스 수집·검증 (이전: 데이터셋)
 ```
 
-When `너는 <session name>` names a lane the roster does not list, the bot warns in the channel; for a previous name it gives the current one. Inbox delivery still follows `.claude/a4d-inbox.json`.
+When `너는 <session name>` names a lane the roster does not list, the bot warns in the channel; for a previous name it gives the current one.
+
+With `roster` in `.claude/a4d-inbox.json` instead of glob rules, the roster decides which lane gets a file:
+
+```json
+{ "dir": ".planning/inbox", "roster": { "hub": "증류-총괄", "everyone": ["전레인"] } }
+```
+
+File names read as `YYYY-MM-DD[-HHMM]-<sender>-<recipient>…-<title>.md`: the first word after the date and time is the sender, and later words equal to a session name or previous name in the roster are recipients (a name with `-` such as `esptts-총괄` counts as one). The hub lane gets every file it did not send; another lane gets a file that names it as a recipient or has an `everyone` word (default `전레인`). Without `hub`, the hub is the lane named or formerly named `총괄`. The roster is read when the watch starts, so run `/a4d inbox on` after changing it.
 
 ## Development
 
