@@ -21,6 +21,7 @@ import { setupAutoArchive } from './sessions/autoArchive.js';
 import { setupLifecycle } from './sessions/lifecycle.js';
 import { prepareSessionMessage } from './sessions/handoff.js';
 import { inboxWatchNote, setupInboxWatch, startInboxWatch } from './sessions/inboxWatch.js';
+import { readRoster, rosterWarning } from './sessions/roster.js';
 import { forgetChannelThreads } from './sessions/toolThreads.js';
 import { setupModelCatalog } from './sessions/modelCatalog.js';
 import { handleModelAutocomplete } from './commands/model.js';
@@ -173,7 +174,9 @@ export async function startBot(): Promise<void> {
         const watch = startInboxWatch(session);
         if (watch.ok) content = `${inboxWatchNote(watch.dir)}\n${content}`;
         const watchLine = watch.ok ? `\n📬 인박스 감시 시작: \`${watch.dir}\`` : '';
-        await message.channel.send(prepared.notice + watchLine).catch(() => {});
+        const warning = session.sessionName ? rosterWarning(readRoster(session.cwd), session.sessionName) : null;
+        const rosterLine = warning ? `\n${warning}` : '';
+        await message.channel.send(prepared.notice + watchLine + rosterLine).catch(() => {});
       }
 
       // Process attachments if present

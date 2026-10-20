@@ -151,6 +151,18 @@ Projects that keep one message per file in an inbox folder put their routing rul
 
 `dir` is relative to the session directory. `default` applies to every lane; `{lane}` stands for the lane's `match` (default: the session name). A `lanes.<session name>` entry replaces the default `include`/`exclude`. Patterns are file-name globs (`*`, `?`); `README.md` is never a message. Files the session wrote itself are skipped. After changing the file, run `/a4d inbox on` in the session to re-read it. Remove the project's own inbox watch loop from its instructions (CLAUDE.md, `.claude/a4d-on-resume.md`) once the bot watches; the bot also tells the session not to start one.
 
+#### Session roster
+
+A `## 세션` section in the inbox folder's `README.md` is the project's session roster: one lane per line, with its previous names when it was renamed. The project's hub session keeps it.
+
+```markdown
+## 세션
+- 증류-총괄: 레인 조율, 사용자 보고
+- 증류-데이터셋: 코퍼스 수집·검증 (이전: 데이터셋)
+```
+
+When `너는 <session name>` names a lane the roster does not list, the bot warns in the channel; for a previous name it gives the current one. Inbox delivery still follows `.claude/a4d-inbox.json`.
+
 ## Development
 
 ```bash
