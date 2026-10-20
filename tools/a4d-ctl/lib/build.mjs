@@ -31,7 +31,8 @@ function newestSource(dir) {
 /** What has to run before the bot in `repoDir` can start on its current sources. */
 export function buildPlan(repoDir) {
   const installed = mtime(path.join(repoDir, 'node_modules', '.package-lock.json')); // written by npm install
-  const deps = Math.max(mtime(path.join(repoDir, 'package.json')) ?? 0, mtime(path.join(repoDir, 'package-lock.json')) ?? 0);
+  // The lock file pins what is installed; package.json also changes for scripts, files or the version.
+  const deps = mtime(path.join(repoDir, 'package-lock.json')) ?? 0;
   const install = installed === null || deps > installed;
 
   const built = mtime(path.join(repoDir, 'dist', 'cli.js'));

@@ -75,6 +75,12 @@ describe('buildPlan', () => {
     expect(buildPlan(repo)).toEqual({ install: true, build: true });
   });
 
+  it('does not reinstall when only package.json changed (scripts, files, version)', () => {
+    upToDate();
+    at('package.json', 10);
+    expect(buildPlan(repo)).toEqual({ install: false, build: false });
+  });
+
   it('builds when there is no build yet', () => {
     upToDate();
     fs.rmSync(path.join(repo, 'dist'), { recursive: true });
