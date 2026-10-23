@@ -3,14 +3,15 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type { Client, Message, TextChannel } from 'discord.js';
-import { sessionManager } from './sessionManager.js';
+import { sessionManager, type ActiveSession } from './sessionManager.js';
 import { getSessionsForGuild, saveSessionToGuild } from './sessionStore.js';
 import { inboxWatchNote, startInboxWatch } from './inboxWatch.js';
 import { buildStatusEmbed, COLORS } from '../formatters/embedBuilder.js';
 import { createPermissionCallback } from '../interactions/permissionHandler.js';
+import type { SessionEntry } from '../guild.js';
 
 export type RestoreResult =
-  | { ok: true; sessionId: string; cwd: string; effort?: string; inboxDir?: string }
+  | { ok: true; sessionId: string; cwd: string; effort?: string; inboxDir?: string; fresh?: true }
   | { ok: false; reason: string };
 
 export async function findStatusMessage(channel: TextChannel, botId: string | undefined): Promise<Message | null> {
@@ -66,12 +67,15 @@ async function restoreUnlocked(
   if (!sessionId || sessionId === 'pending') {
     sessionId = stored?.sessionId || undefined;
   }
+  // Checked after the awaits above and with no await before resumeSession, so nothing can slip in.
+  const live = sessionManager.getSession(channel.id);
   if (!sessionId || sessionId === 'pending') {
+    // Stored with an empty id: /a4d clear or a fork whose first turn never ran. There is no
+    // conversation to lose, so start that fresh session again instead of leaving the channel dead.
+    if (stored && !stored.sessionId) return startFresh(channel, guildId, userId, client, statusMsg, rawCwd, cwd, model, stored, live);
     return { ok: false, reason: 'No session id recorded for this channel. Start a new session instead.' };
   }
 
-  // Checked after the awaits above and with no await before resumeSession, so nothing can slip in.
-  const live = sessionManager.getSession(channel.id);
   // Stop and Archive delete the stored entry, so fall back to the stopped session still in memory.
   const effort = stored?.effort ?? live?.effort;
   const permissionMode = stored?.permissionMode ?? live?.permissionMode;
@@ -133,6 +137,62 @@ async function restoreUnlocked(
   return { ok: true, sessionId, cwd, effort, ...(watch.ok && { inboxDir: watch.dir }) };
 }
 
+/** Start a new session for a channel whose stored entry has no session id yet, with its stored settings. */
+async function startFresh(
+  channel: TextChannel,
+  guildId: string,
+  userId: string,
+  client: Client,
+  statusMsg: Message,
+  rawCwd: string,
+  cwd: string,
+  model: string,
+  stored: SessionEntry,
+  live: ActiveSession | null,
+): Promise<RestoreResult> {
+  if (live && live.state !== 'stopped' && live.state !== 'archived') {
+    return { ok: false, reason: 'This session is already active.' };
+  }
+  const { effort, permissionMode, sessionName, threadMode } = stored;
+  const session = sessionManager.createSession(
+    guildId,
+    userId,
+    channel.id,
+    cwd,
+    model,
+    createPermissionCallback(channel, userId),
+    client,
+    permissionMode,
+    effort,
+  );
+  session.sessionName = sessionName;
+  session.threadMode = threadMode;
+  session.inboxWatch = stored.inboxWatch !== false;
+  // The new id arrives with the init message and is persisted then, as after /a4d clear.
+  saveSessionToGuild(guildId, channel.id, '', cwd, userId, effort, permissionMode, sessionName, threadMode);
+  const watch = startInboxWatch(session); // no-op until the session is named
+
+  // Best-effort, as in a resume: the session is already running.
+  await statusMsg
+    .edit({
+      embeds: [
+        buildStatusEmbed({
+          status: 'Session Active',
+          color: COLORS.IDLE,
+          cwd: rawCwd,
+          model,
+          sessionId: 'pending',
+          costUsd: 0,
+          startedAt: session.createdAt,
+          permissionMode,
+        }),
+      ],
+    })
+    .catch((err) => console.warn('[restore] Failed to update status embed:', err));
+
+  return { ok: true, sessionId: '', cwd, effort, fresh: true, ...(watch.ok && { inboxDir: watch.dir }) };
+}
+
 /**
  * Project file whose text is sent to a session right after an automatic resume. A restart ends the
  * session's background watches (e.g. an inbox Monitor); the project says here how to set them up again.
@@ -171,13 +231,19 @@ export async function autoResumeSessions(
       if (!channel || channel.parentId !== sessionsCategoryId) continue;
       try {
         const result = await restoreChannelSession(channel, guildId, entry.userId, client);
-        console.log(`[auto-resume] ${channelId}: ${result.ok ? `resumed ${result.sessionId}` : result.reason}`);
-        const resumePrompt = result.ok ? readResumePrompt(result.cwd) : null;
+        console.log(
+          `[auto-resume] ${channelId}: ${result.ok ? (result.fresh ? 'started fresh (no id after clear)' : `resumed ${result.sessionId}`) : result.reason}`,
+        );
+        // A fresh session has nothing to pick up: the start procedure runs on "너는 <세션명>".
+        const resumePrompt = result.ok && !result.fresh ? readResumePrompt(result.cwd) : null;
         // The project's resume instructions may say to restart an inbox watch loop the bot now runs.
         const prompt =
           result.ok && result.inboxDir && resumePrompt ? `${inboxWatchNote(result.inboxDir)}\n\n${resumePrompt}` : resumePrompt;
         await channel.send(
-          result.ok
+          result.ok && result.fresh
+            ? `🔄 봇이 다시 켜졌습니다. 이 채널은 clear 뒤 대화가 없던 세션이라 새 세션으로 다시 시작했습니다. ` +
+              `\`너는 <세션명>\` 으로 시작하면 그 이름의 최신 인계 폴더를 읽고 이어갑니다.`
+            : result.ok
             ? `🔄 봇이 다시 켜져서 이 세션을 자동으로 이어받았습니다(effort: ${result.effort ?? 'settings.json'}). ` +
               (prompt ? `\`${RESUME_PROMPT_FILE}\` 의 재개 지시를 보냈습니다.` : '하던 일이 있으면 이어서 시켜 주세요.') +
               (result.inboxDir ? `\n📬 인박스 감시 중: \`${result.inboxDir}\`` : '')

@@ -96,11 +96,34 @@ describe('restoreChannelSession', () => {
   });
 
   it('refuses when no id is known, instead of guessing the newest session in the directory', async () => {
-    writeGuild({ ch3: { sessionId: '', cwd: '/proj', createdAt: 't', userId: 'u' } });
-    const { resume, restoreChannelSession } = await load();
+    writeGuild({}); // e.g. Stop removed the entry
+    const { sessionManager, resume, restoreChannelSession } = await load();
+    const create = vi.spyOn(sessionManager, 'createSession');
     const result = await restoreChannelSession(fakeChannel('ch3', 'pending').channel, GUILD, 'u', client);
     expect(result).toMatchObject({ ok: false });
     expect(resume).not.toHaveBeenCalled();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it('starts a fresh session with the stored settings when /a4d clear left no id (no turn before the restart)', async () => {
+    writeGuild({ ch3b: { sessionId: '', cwd: '/proj', createdAt: 't', userId: 'u', effort: 'high', permissionMode: 'plan', threadMode: 'off' } });
+    const { sessionManager, resume, restoreChannelSession } = await load();
+    const fresh = { channelId: 'ch3b', guildId: GUILD, cwd: '/proj', sessionId: '', createdAt: new Date().toISOString() };
+    const create = vi.spyOn(sessionManager, 'createSession').mockImplementation(
+      () => fresh as unknown as ReturnType<typeof sessionManager.createSession>,
+    );
+    const { channel, edit } = fakeChannel('ch3b', 'pending');
+    const result = await restoreChannelSession(channel, GUILD, 'u', client);
+    expect(result).toMatchObject({ ok: true, fresh: true, cwd: '/proj', effort: 'high' });
+    expect(resume).not.toHaveBeenCalled();
+    expect(create).toHaveBeenCalledOnce();
+    expect(create.mock.calls[0].slice(2, 5)).toEqual(['ch3b', '/proj', 'opus']);
+    expect(create.mock.calls[0][7]).toBe('plan');
+    expect(create.mock.calls[0][8]).toBe('high');
+    expect(fresh).toMatchObject({ threadMode: 'off', inboxWatch: true });
+    expect(edit).toHaveBeenCalledOnce();
+    const saved = JSON.parse(fs.readFileSync(nodePath.join(home, '.agent4discord', 'guilds', `${GUILD}.json`), 'utf-8'));
+    expect(saved.activeSessions.ch3b).toMatchObject({ sessionId: '', effort: 'high', permissionMode: 'plan', threadMode: 'off' });
   });
 
   it('refuses a second restore of the same channel while the first is still running', async () => {
@@ -167,6 +190,25 @@ describe('autoResumeSessions', () => {
     expect(relay.mock.calls[0][0]).toBe('ch7');
     expect(relay.mock.calls[0][1]).toMatch(/not from the user[\s\S]*Re-arm the inbox watch\.$/);
     expect(send.mock.calls[0][0]).toContain('a4d-on-resume.md');
+  });
+
+  it('restarts a cleared session without sending resume instructions, and says so', async () => {
+    const cwd = fs.mkdtempSync(nodePath.join(home, 'proj-'));
+    fs.mkdirSync(nodePath.join(cwd, '.claude'));
+    fs.writeFileSync(nodePath.join(cwd, '.claude', 'a4d-on-resume.md'), 'Re-arm the inbox watch.\n');
+    writeGuild({ ch8: { sessionId: '', cwd, createdAt: 't', userId: 'u' } });
+    const { sessionManager } = await load();
+    const relay = vi.spyOn(sessionManager, 'sendMessage').mockImplementation(() => {});
+    const create = vi.spyOn(sessionManager, 'createSession').mockImplementation(
+      () => ({ channelId: 'ch8', guildId: GUILD, cwd, sessionId: '', createdAt: new Date().toISOString() }) as unknown as ReturnType<typeof sessionManager.createSession>,
+    );
+    const { autoResumeSessions } = await import('./restore.js');
+    const { channel, send } = fakeChannel('ch8', 'pending', cwd);
+    const bot = { ...client, channels: { fetch: async () => channel } } as unknown as Client;
+    await autoResumeSessions(bot, [{ guildId: GUILD, sessionsCategoryId: 'sessions-cat', entries: { ch8: { userId: 'u' } } }]);
+    expect(create).toHaveBeenCalledOnce();
+    expect(relay).not.toHaveBeenCalled();
+    expect(send.mock.calls[0][0]).toContain('새 세션으로 다시 시작');
   });
 
   it('sends nothing to the session when the project has no resume instructions', async () => {
