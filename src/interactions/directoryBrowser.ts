@@ -35,6 +35,8 @@ const HOMEDIR = os.homedir();
 const MAX_SELECT_OPTIONS = 25;
 const MAX_LABEL_LENGTH = 95;
 const MAX_VALUE_LENGTH = 100;
+/** Select value prefix for a folder name too long to be a value; "/" cannot appear in a name. */
+const INDEX_VALUE = '#/';
 
 /**
  * Temporary store mapping userId -> current browser path, used to pass state
@@ -163,13 +165,14 @@ export async function buildBrowserMessage(
     });
     selectMenu.setDisabled(true);
   } else {
-    const pagedDirs = dirs.slice(page * MAX_SELECT_OPTIONS, (page + 1) * MAX_SELECT_OPTIONS);
-    for (const dir of pagedDirs) {
-      const fullPath = path.join(resolvedPath, dir);
+    // The value is the folder name, not its full path: full paths over 100 chars used to be cut,
+    // and two cut paths could be equal, which makes Discord reject the whole message.
+    const start = page * MAX_SELECT_OPTIONS;
+    dirs.slice(start, start + MAX_SELECT_OPTIONS).forEach((dir, i) => {
       const label = dir.length > MAX_LABEL_LENGTH ? dir.slice(0, MAX_LABEL_LENGTH) : dir;
-      const value = fullPath.length > MAX_VALUE_LENGTH ? fullPath.slice(0, MAX_VALUE_LENGTH) : fullPath;
+      const value = dir.length > MAX_VALUE_LENGTH ? `${INDEX_VALUE}${start + i}` : dir;
       selectMenu.addOptions({ label, value });
-    }
+    });
   }
 
   const selectRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(selectMenu);
@@ -267,12 +270,31 @@ export async function handleDirectoryBrowse(interaction: StringSelectMenuInterac
   const selected = interaction.values[0];
   if (!selected || selected === '_none') return;
 
-  if (!isPathSafe(selected)) {
+  // Older messages carry the full path as the value; newer ones the folder name (or its index).
+  let target = selected;
+  if (!path.isAbsolute(selected)) {
+    const state = parseFooterState(interaction);
+    if (state.unknown) {
+      await interaction.reply({ content: LOST_STATE, ephemeral: true });
+      return;
+    }
+    let name: string | undefined = selected;
+    if (selected.startsWith(INDEX_VALUE)) {
+      name = (await listDirectories(state.path).catch(() => []))[Number(selected.slice(INDEX_VALUE.length))];
+    }
+    if (!name) {
+      await interaction.reply({ content: 'This folder list is out of date. Pick again.', ephemeral: true });
+      return;
+    }
+    target = path.join(state.path, name);
+  }
+
+  if (!isPathSafe(target)) {
     await interaction.reply({ content: 'Invalid directory path.', ephemeral: true });
     return;
   }
 
-  const message = await buildBrowserMessage(selected);
+  const message = await buildBrowserMessage(target);
   await interaction.update(message);
 }
 

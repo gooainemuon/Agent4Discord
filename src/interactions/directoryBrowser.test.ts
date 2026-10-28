@@ -92,6 +92,30 @@ describe('buildModelPicker', () => {
   });
 });
 
+describe('folder list values', () => {
+  it('stay unique and lead into the right folder when full paths pass 100 chars', async () => {
+    const { buildBrowserMessage, handleDirectoryBrowse } = await import('./directoryBrowser.js');
+    const deep = nodePath.join(project, '.claude', 'worktrees', 'x'.repeat(100 - project.length));
+    const long = 'y'.repeat(120);
+    for (const d of ['runtime-common', 'runtime-native', long]) fs.mkdirSync(nodePath.join(deep, d), { recursive: true });
+
+    const menu = (await buildBrowserMessage(deep)).components[0].toJSON().components[0] as {
+      custom_id: string;
+      options: { value: string }[];
+    };
+    const values = menu.options.map((o) => o.value);
+    expect(new Set(values).size).toBe(3);
+    expect(values.every((v) => v.length <= 100)).toBe(true);
+
+    for (const [value, dir] of [[values[0], 'runtime-common'], [values[2], long]]) {
+      const update = vi.fn(async (_m: unknown) => undefined);
+      await handleDirectoryBrowse({ customId: menu.custom_id, values: [value], update, reply: vi.fn() } as never);
+      const next = update.mock.calls[0][0] as { embeds: { toJSON(): { footer?: { text: string } } }[] };
+      expect(next.embeds[0].toJSON().footer?.text).toBe(`${nodePath.join(deep, dir)} | p0`);
+    }
+  });
+});
+
 describe('Go to… (typed path)', () => {
   it('expands ~ and resolves relative paths from the shown folder', async () => {
     const { resolveGotoPath } = await import('./directoryBrowser.js');
