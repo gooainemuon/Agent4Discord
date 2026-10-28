@@ -132,7 +132,8 @@ export async function buildBrowserMessage(
     .setTitle('Select Working Directory')
     .setDescription(
       `📂 **Current folder: \`${displayPath(resolvedPath)}\`**\n` +
-        'Session Start opens a session in this folder. Pick from the list to go into a subfolder.' +
+        'Session Start opens a session in this folder. Pick from the list to go into a subfolder.\n' +
+        'Hidden folders (`.name`) are not listed: use **Go to…** to type a path.' +
         (atHome ? '\n⚠️ This is the home directory, not a project folder.' : ''),
     )
     .setFooter({ text: `${resolvedPath} | p${page}` })
@@ -212,7 +213,15 @@ export async function buildBrowserMessage(
     cancelButton,
   );
 
-  const components: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [selectRow, buttonRow];
+  // A row of its own: the button row above already holds Discord's maximum of five.
+  const gotoButton = new ButtonBuilder()
+    .setCustomId(id('a4d:dir:goto'))
+    .setLabel('Go to…')
+    .setStyle(ButtonStyle.Secondary)
+    .setEmoji('✏️');
+  const gotoRow = new ActionRowBuilder<MessageActionRowComponentBuilder>().addComponents(gotoButton);
+
+  const components: ActionRowBuilder<MessageActionRowComponentBuilder>[] = [selectRow, buttonRow, gotoRow];
 
   // Pagination row (only when >25 directories)
   const totalPages = Math.max(1, Math.ceil(dirs.length / MAX_SELECT_OPTIONS));
@@ -381,6 +390,71 @@ export async function handleCreateDirSubmit(interaction: ModalSubmitInteraction)
     await interaction.update(browserMsg);
   } else {
     await interaction.reply({ content: `Created directory **${dirname}**.`, ephemeral: true });
+  }
+}
+
+/**
+ * Resolve a typed path: "~" and "~/..." expand to the home directory, anything relative is taken
+ * from the folder the browser is showing.
+ */
+export function resolveGotoPath(input: string, base: string, homeDir: string = HOMEDIR): string {
+  const expanded = input === '~' ? homeDir : input.startsWith('~/') ? path.join(homeDir, input.slice(2)) : input;
+  return path.resolve(base, expanded);
+}
+
+/**
+ * Handle the "Go to…" button -- show a modal for typing a folder path. This is the way into
+ * folders the list leaves out (hidden ones such as `.claude`).
+ */
+export async function handleGotoDir(interaction: ButtonInteraction): Promise<void> {
+  const state = parseFooterState(interaction);
+  const { key } = splitStateKey(interaction.customId);
+
+  // The modal id carries the browser's state key so the submit knows which folder "relative" means.
+  const modal = new ModalBuilder()
+    .setCustomId(key ? withStateKey('a4d:dir:goto-modal', key) : 'a4d:dir:goto-modal')
+    .setTitle('Go to Folder');
+
+  const current = displayPath(state.path);
+  const pathInput = new TextInputBuilder()
+    .setCustomId('path')
+    .setLabel('Folder path (~/..., /..., or relative)')
+    .setStyle(TextInputStyle.Short)
+    .setValue(current.endsWith('/') ? current : current + '/')
+    .setRequired(true)
+    .setMaxLength(1024);
+
+  modal.addComponents(
+    new ActionRowBuilder<ModalActionRowComponentBuilder>().addComponents(pathInput),
+  );
+
+  await interaction.showModal(modal);
+}
+
+/**
+ * Handle the modal submit for "Go to…" -- move the browser to the typed folder.
+ */
+export async function handleGotoDirSubmit(interaction: ModalSubmitInteraction): Promise<void> {
+  const input = interaction.fields.getTextInputValue('path').trim();
+  const base = loadBrowserState(splitStateKey(interaction.customId).key)?.path ?? HOMEDIR;
+  const target = resolveGotoPath(input, base);
+
+  let isDir = false;
+  try {
+    isDir = fs.statSync(target).isDirectory();
+  } catch {
+    // missing or unreadable: reported below
+  }
+  if (!input || !isDir) {
+    await interaction.reply({ content: `Not a folder: \`${displayPath(target)}\``, ephemeral: true });
+    return;
+  }
+
+  const browserMsg = await buildBrowserMessage(target);
+  if (interaction.isFromMessage()) {
+    await interaction.update(browserMsg);
+  } else {
+    await interaction.reply({ ...browserMsg, ephemeral: true });
   }
 }
 

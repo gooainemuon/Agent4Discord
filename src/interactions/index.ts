@@ -8,6 +8,8 @@ import {
   handleDirectoryNext,
   handleDirectoryParent,
   handleDirectoryPrev,
+  handleGotoDir,
+  handleGotoDirSubmit,
   handleModelCancel,
   handleModelConfirm,
   handleModelSelect,
@@ -78,6 +80,9 @@ export async function routeInteraction(
         return;
       case 'a4d:dir:create':
         await handleCreateDir(interaction as ButtonInteraction);
+        return;
+      case 'a4d:dir:goto':
+        await handleGotoDir(interaction as ButtonInteraction);
         return;
       case 'a4d:dir:pageinfo':
         await interaction.deferUpdate();
@@ -228,6 +233,11 @@ export async function routeModalSubmit(
 
   if (customId.startsWith('a4d:dir:create-modal')) {
     await handleCreateDirSubmit(interaction);
+    return;
+  }
+
+  if (customId.startsWith('a4d:dir:goto-modal')) {
+    await handleGotoDirSubmit(interaction);
     return;
   }
 

@@ -92,6 +92,59 @@ describe('buildModelPicker', () => {
   });
 });
 
+describe('Go to… (typed path)', () => {
+  it('expands ~ and resolves relative paths from the shown folder', async () => {
+    const { resolveGotoPath } = await import('./directoryBrowser.js');
+    expect(resolveGotoPath('~', project, home)).toBe(home);
+    expect(resolveGotoPath('~/.claude', project, home)).toBe(nodePath.join(home, '.claude'));
+    expect(resolveGotoPath('/opt/x', project, home)).toBe('/opt/x');
+    expect(resolveGotoPath('.hidden/sub', project, home)).toBe(nodePath.join(project, '.hidden', 'sub'));
+    expect(resolveGotoPath('../', project, home)).toBe(nodePath.dirname(project));
+  });
+
+  it('has a Go to… button carrying the folder', async () => {
+    const { splitStateKey, loadBrowserState } = await import('./browserState.js');
+    const m = await render(project);
+    const goto = m.rows.flat().find((c) => splitStateKey(c.custom_id).base === 'a4d:dir:goto');
+    expect(goto?.label).toBe('Go to…');
+    expect(loadBrowserState(splitStateKey(goto!.custom_id).key)?.path).toBe(project);
+  });
+
+  async function submit(typed: string) {
+    const { buildBrowserMessage, handleGotoDirSubmit } = await import('./directoryBrowser.js');
+    const { splitStateKey, withStateKey } = await import('./browserState.js');
+    const msg = await buildBrowserMessage(project);
+    const key = splitStateKey((msg.components[2].toJSON().components[0] as { custom_id: string }).custom_id).key!;
+    const update = vi.fn(async (_m: unknown) => undefined);
+    const reply = vi.fn(async (_m: unknown) => undefined);
+    await handleGotoDirSubmit({
+      customId: withStateKey('a4d:dir:goto-modal', key),
+      fields: { getTextInputValue: () => typed },
+      isFromMessage: () => true,
+      update,
+      reply,
+    } as never);
+    return { update, reply };
+  }
+
+  it('moves the browser into a hidden folder the list leaves out', async () => {
+    fs.mkdirSync(nodePath.join(project, '.hidden'));
+    const { update, reply } = await submit('.hidden');
+    expect(reply).not.toHaveBeenCalled();
+    const next = update.mock.calls[0][0] as { embeds: { toJSON(): { footer?: { text: string } } }[] };
+    expect(next.embeds[0].toJSON().footer?.text).toBe(`${nodePath.join(project, '.hidden')} | p0`);
+  });
+
+  it('refuses a path that is not a folder', async () => {
+    fs.writeFileSync(nodePath.join(project, 'file.txt'), 'x');
+    for (const typed of ['nope', 'file.txt']) {
+      const { update, reply } = await submit(typed);
+      expect(update).not.toHaveBeenCalled();
+      expect((reply.mock.calls[0][0] as { content: string }).content).toContain('Not a folder');
+    }
+  });
+});
+
 describe('handlers with the embed hidden (no footer to read)', () => {
   it('model picker keeps folder and picks from the component key alone', async () => {
     const { buildModelPicker, handleModelSelect } = await import('./directoryBrowser.js');
