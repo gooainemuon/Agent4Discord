@@ -121,8 +121,9 @@ describe('handoffRootsFor / usesHandoffNotes', () => {
   it("puts the project's .planning/handoff/ after a remembered root and before the directory", async () => {
     writeGuild();
     const { handoffRootsFor, usesHandoffNotes } = await load();
-    expect(handoffRootsFor(GUILD, proj)).toEqual([proj]);
     const project = nodePath.join(proj, '.planning', 'handoff');
+    // New handoffs go to .planning/handoff/ even before it exists; the directory is only searched.
+    expect(handoffRootsFor(GUILD, proj)).toEqual([project, proj]);
     fs.mkdirSync(project, { recursive: true });
     expect(handoffRootsFor(GUILD, proj)).toEqual([project, proj]);
     expect(usesHandoffNotes(project, proj)).toBe(true);

@@ -1,8 +1,8 @@
 // Session lanes: a session named with "너는 <세션명>" hands its work over to the next session of the
 // same name, in one of two forms:
-//   note   — `YYYY-MM-DD-hhmm-<세션명>.md`, one new file per handoff (projects with .planning/handoff/,
-//            the convention of rules/handoff.md: inbox and work log live where the project says)
-//   folder — `YYYY-MM-DD-hhmm-<세션명>/` with 인계 노트, 인박스 and 작업 로그 (everywhere else)
+//   note   — `YYYY-MM-DD-hhmm-<세션명>.md`, one new file per handoff in the project's .planning/handoff/
+//            (the default; the convention of rules/handoff.md: inbox and work log live where the project says)
+//   folder — `YYYY-MM-DD-hhmm-<세션명>/` with 인계 노트, 인박스 and 작업 로그 (a `dir` given to /a4d handoff)
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -27,7 +27,7 @@ const NAME_PATTERN = /^[\p{L}\p{N}][\p{L}\p{N}._-]{0,59}$/u;
 const STAMP_PATTERN = /^(\d{4}-\d{2}-\d{2}-\d{4})-(.+)$/u;
 const NOTE_PATTERN = /^(\d{4}-\d{2}-\d{2}-\d{4})-(.+)\.md$/u;
 
-/** The project's own handoff folder; when it exists it is the default root and handoffs are notes. */
+/** The project's own handoff folder: the default root (made on the first handoff); handoffs there are notes. */
 export const PROJECT_HANDOFF_DIR = path.join('.planning', 'handoff');
 
 export function isValidSessionName(name: string): boolean {
@@ -65,12 +65,11 @@ export function resolveHandoffRoot(dir: string, cwd: string, homeDir: string = o
 
 /**
  * Where to look for a session's handoffs, most preferred first: the remembered root for this cwd,
- * the project's .planning/handoff/ if it exists, then cwd itself. The first one is where new ones go.
+ * the project's .planning/handoff/, then cwd itself. The first one is where new ones go, so by default
+ * that is .planning/handoff/, never the project root; cwd stays last only to find handoffs written there before.
  */
 export function handoffRootsFor(guildId: string, cwd: string): string[] {
-  const project = path.join(cwd, PROJECT_HANDOFF_DIR);
-  const projectRoot = fs.existsSync(project) ? [project] : [];
-  return [...new Set([...knownHandoffRoots(guildId, cwd), ...projectRoot, cwd])];
+  return [...new Set([...knownHandoffRoots(guildId, cwd), path.join(cwd, PROJECT_HANDOFF_DIR), cwd])];
 }
 
 /** Whether handoffs in `root` are single note files rather than folders. */

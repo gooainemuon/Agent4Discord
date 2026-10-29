@@ -15,7 +15,7 @@ export interface GuildConfig {
   initializedAt: string;
   initializedBy: string;
   activeSessions: Record<string, SessionEntry>;
-  /** Where /a4d handoff puts handoff folders, per session directory. Absent = the directory itself. */
+  /** Where /a4d handoff puts handoffs, per session directory. Absent = the directory's .planning/handoff/. */
   handoffRoots?: Record<string, string>;
 }
 

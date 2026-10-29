@@ -89,7 +89,7 @@ const a4dCommand = new SlashCommandBuilder()
       .setDescription('Write a handoff folder (YYYY-MM-DD-hhmm-<session name>) for the next session')
       .addStringOption((opt) =>
         opt.setName('dir')
-          .setDescription('Where to put handoff folders (default: the session directory; remembered)')
+          .setDescription('Where to put handoffs (default: the project\'s .planning/handoff/; remembered)')
           .setRequired(false)
       )
       .addStringOption((opt) =>

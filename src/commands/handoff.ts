@@ -21,7 +21,7 @@ import { startInboxWatch } from '../sessions/inboxWatch.js';
  * Handle `/a4d handoff [dir] [name]` -- ask the session to hand over to the next session of its lane.
  * In a note root (the project's .planning/handoff/) it writes a new `<root>/YYYY-MM-DD-hhmm-<세션명>.md`;
  * elsewhere the bot makes `<root>/YYYY-MM-DD-hhmm-<세션명>/` for its 인계 노트, 인박스 and 작업 로그.
- * `dir` (default: .planning/handoff/ if the project has one, else the session directory) is remembered
+ * `dir` (default: the project's .planning/handoff/, made if missing) is remembered
  * for this directory; `name` sets the session name when the session has none.
  */
 export async function handleHandoff(interaction: ChatInputCommandInteraction): Promise<void> {
